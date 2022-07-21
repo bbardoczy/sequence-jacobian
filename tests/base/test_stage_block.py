@@ -81,10 +81,11 @@ def test_equivalence():
     assert np.max(np.abs(td_lin1['UC'] - td_lin2['UC'])) < 2E-4
 
     # impulse nonlinear
-    td_nonlin1 = hh1.impulse_nonlinear(ss1, shock * 1E-4, outputs=['C', 'UC'])
-    td_nonlin2 = hh2.impulse_nonlinear(ss2, shock * 1E-4, outputs=['C', 'UC'])
+    td_nonlin1 = hh1.impulse_nonlinear(ss1, shock * 1E-4, outputs=['C', 'UC'], internals=['hh'])
+    td_nonlin2 = hh2.impulse_nonlinear(ss2, shock * 1E-4, outputs=['C', 'UC'], internals=['hh'])
     assert np.allclose(td_nonlin1['C'], td_nonlin2['C'])
     assert np.allclose(td_nonlin1['UC'], td_nonlin2['UC'])
+    assert np.allclose(td_nonlin1.internals['hh']['c'], td_nonlin2.internals['hh']['stage1']['c'], atol=1.e-6)
 
 
 def test_remap():

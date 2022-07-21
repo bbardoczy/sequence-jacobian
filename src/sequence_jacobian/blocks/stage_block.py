@@ -124,12 +124,19 @@ class StageBlock(Block):
         D_path = self.forward_nonlinear(ss, lom_path)
 
         aggregates = {}
+        internals = {}
         for stage in self.stages:
             for o in stage.report:
                 if self.M_outputs @ o in outputs:
                     aggregates[self.M_outputs @ o] = utils.optimized_routines.fast_aggregate(D_path[stage.name], report_path[stage.name][o])
+            
+            # save micro outputs (report) and distribution under stage name
+            internals[stage.name] = {**report_path[stage.name], 'D': D_path[stage.name]}
+        
+        # save sequence of laws of motion separately (breaking up by stage seems inefficient)
+        internals['law_of_motion'] = lom_path
 
-        return ImpulseDict(aggregates, T=inputs.T) - ssin
+        return ImpulseDict(aggregates, {self.name: internals}, T=inputs.T) - ssin
 
     def _impulse_linear(self, ss, inputs, outputs, Js):
         return ImpulseDict(self._jacobian(ss, list(inputs.keys()), outputs, inputs.T).apply(inputs))
