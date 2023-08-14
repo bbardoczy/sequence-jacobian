@@ -207,10 +207,11 @@ class Exogenous(Stage):
 
     
     def backward_step(self, inputs, lawofmotion=False):
-        if len(inputs[self.markov_name].shape) == 2:
+        if inputs[self.markov_name].ndim == 2:
             Pi = Markov(inputs[self.markov_name], self.index)
-        elif len(inputs[self.markov_name].shape) > 2:
+        elif inputs[self.markov_name].ndim > 2:
             Pi = ConditionalMarkov(inputs[self.markov_name], self.index)
+            Pi = Pi.T
 
         outputs = {k: Pi @ inputs[k] for k in self.backward_outputs}
 
@@ -221,18 +222,20 @@ class Exogenous(Stage):
 
     
     def backward_step_shock(self, ss, shocks, precomputed=None):
-        if len(ss[self.markov_name].shape) == 2:
+        if ss[self.markov_name].ndim == 2:
             Pi = Markov(ss[self.markov_name], self.index)
-        elif len(ss[self.markov_name].shape) > 2:
+        elif ss[self.markov_name].ndim > 2:
             Pi = ConditionalMarkov(ss[self.markov_name], self.index)
+            Pi = Pi.T
 
         outputs = {k: Pi @ shocks[k] for k in self.backward_outputs if k in shocks}
 
         if self.markov_name in shocks:
-            if len(ss[self.markov_name].shape) == 2:
+            if ss[self.markov_name].ndim == 2:
                 dPi = Markov(shocks[self.markov_name], self.index)
-            elif len(ss[self.markov_name].shape) > 2:
+            elif ss[self.markov_name].ndim > 2:
                 dPi = ConditionalMarkov(shocks[self.markov_name], self.index)
+                dPi = dPi.T
             for k in self.backward_outputs:
                 if k in outputs:
                     outputs[k] += dPi @ ss[k]

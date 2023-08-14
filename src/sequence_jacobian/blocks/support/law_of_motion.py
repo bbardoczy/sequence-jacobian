@@ -138,7 +138,7 @@ class Markov(LawOfMotion):
 class ConditionalMarkov(LawOfMotion):
     """Let Markov matrix depend on all other states as well."""
     def __init__(self, P, i):
-        self.P = P                     # choice prob P(d|...s_i...), 0 for unavailable choices
+        self.P = P                     # choice prob P(s_i'|...s_i...)
         self.i = i                     # dimension of state space that will be updated
 
         # cache "transposed" version of this, since we'll always need both!

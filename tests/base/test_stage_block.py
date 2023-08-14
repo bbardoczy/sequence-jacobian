@@ -12,11 +12,12 @@ def make_grids(rho_e, sd_e, nE, amin, amax, nA):
     return e_grid, e_dist, Pi_ss, a_grid
 
 def alter_Pi(Pi_ss, shift, nA):
-    Pi = Pi_ss.copy()
+    Pi = Pi_ss.copy()  # (z, z')
     Pi[:, 0] -= shift
     Pi[:, -1] += shift
 
-    Pibig = np.broadcast_to(Pi[..., np.newaxis], Pi.shape + (nA,))
+    Pi_T = Pi.T
+    Pibig = np.broadcast_to(Pi_T[..., np.newaxis], Pi.shape + (nA,)) # (z', z, a)
     return Pi, Pibig
 
 def income(atw, N, e_grid, transfer):
