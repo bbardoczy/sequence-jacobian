@@ -42,5 +42,5 @@ def test_krusell_smith_estimation(krusell_smith_dag):
     sigma_measurement = np.full(4, 0.05)
 
     # calculate log-likelihood
-    ll = estimation.log_likelihood(Y, Sigma, sigma_measurement)
+    ll = estimation.gaussian_log_likelihood(Y, Sigma, sigma_measurement)
     assert np.isclose(ll, -59921.410111251025)
