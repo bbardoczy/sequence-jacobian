@@ -28,7 +28,7 @@ def all_covariances(M, sigmas):
     return np.fft.irfftn(total, s=(2 * T - 2,), axes=(0,))[:T]
 
 
-def log_likelihood(Y, Sigma, sigma_measurement=None):
+def gaussian_log_likelihood(Y, Sigma, sigma_measurement=None):
     """Given second moments, compute log-likelihood of data Y.
 
     Parameters
@@ -50,6 +50,25 @@ def log_likelihood(Y, Sigma, sigma_measurement=None):
     V = build_full_covariance_matrix(Sigma, sigma_measurement, Tobs)
     y = Y.ravel()
     return log_likelihood_formula(y, V)
+
+def log_likelihood(data, shocks, jacobian, outputs, exogenous, T, **kwargs):
+    """Given the Jacobian of a parameterized model, calculate the Gaussian likelihood for a provided sequence
+       of shocks.
+    """
+    # construct impulse response functions
+    impulses = shocks.generate_impulses(T)
+    irfs = {i: jacobian @ {i: impulses[i]} for i in exogenous}
+
+    M = np.empty((T, len(outputs), len(exogenous)))
+    for no, o in enumerate(outputs):
+        for ns, s in enumerate(exogenous):
+            M[:, no, ns] = irfs[s][o]
+
+    # approximate the autocovariances
+    Sigma = all_covariances(M, 1)
+
+    # compute the log posterior likelihood
+    return gaussian_log_likelihood(data, Sigma, **kwargs)
 
 
 '''Part 2: helper functions'''
@@ -130,9 +149,24 @@ try:
             return Apply(self, inputs, outputs)
         
         def perform(self, node: Apply, inputs: list[np.ndarray], outputs: list[list[None]]) -> None:
-            logposterior = self.logpdf(
-                *inputs, self.data, self.steady_state, self.model, self.jacobian
-            )
+            # TODO: there should be a better way to consolidate parameters
+            is_not_shock = {
+                inp.name: (inp.name in self.model.inputs) for inp in node.inputs
+            }
+
+            shock_params = [i for (i,v) in zip(inputs, is_not_shock.values()) if not v]
+            model_params = {
+                k: inputs[i] for i,(k,v) in enumerate(is_not_shock.items()) if v
+            }
+
+            if not model_params:
+                logposterior = self.logpdf(
+                    *shock_params, self.data, self.steady_state, self.model, self.jacobian
+                )
+            else:
+                logposterior = self.logpdf(
+                    model_params, *shock_params, self.data, self.steady_state, self.model, self.jacobian
+                )
 
             outputs[0][0] = np.asarray(logposterior)
 
