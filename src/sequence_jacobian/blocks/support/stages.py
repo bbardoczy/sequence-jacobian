@@ -2,7 +2,6 @@ from typing import List, Optional
 import numpy as np
 import copy
 
-# from sequence_jacobian.blocks.support.het_support import DiscreteChoice
 from sequence_jacobian.blocks.support.law_of_motion import DiscreteChoice
 from ...utilities.function import ExtendedFunction, CombinedExtendedFunction
 from ...utilities.ordered_set import OrderedSet
@@ -87,10 +86,11 @@ class Stage:
 
 class Continuous1D(Stage):
     """Stage that does one-dimensional endogenous continuous choice"""
-    def __init__(self, backward, policy, f, name=None, hetoutputs=None):
+    def __init__(self, backward, policy, f, name=None, hetoutputs=None, monotonic=False):
         # subclass-specific attributes
         self.f = ExtendedFunction(f)
         self.policy = policy
+        self.monotonic = monotonic
 
         # attributes needed for any stage
         if name is None:
@@ -111,8 +111,7 @@ class Continuous1D(Stage):
         if not lawofmotion:
             return outputs
         else:
-            # TODO: option for monotonic?!
-            return outputs, lottery_1d(outputs[self.policy], inputs[self.policy + '_grid'], monotonic=False)
+            return outputs, lottery_1d(outputs[self.policy], inputs[self.policy + '_grid'], monotonic=self.monotonic)
     
     def backward_step_shock(self, ss, shocks, precomputed):
         space, i, grid, f = precomputed

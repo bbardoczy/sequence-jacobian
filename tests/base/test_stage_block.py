@@ -6,22 +6,44 @@ from sequence_jacobian.blocks.support.stages import Continuous1D, ExogenousMaker
 from sequence_jacobian import interpolate, grids, misc, combine
 from sequence_jacobian.classes import ImpulseDict
 
+'''
+Compare to equivalent hetblock.
+'''
+
+'''Hetinputs and hetoutputs: same for both blocks'''
+
 def make_grids(rho_e, sd_e, nE, amin, amax, nA):
     e_grid, e_dist, Pi_ss = grids.markov_rouwenhorst(rho=rho_e, sigma=sd_e, N=nE)
     a_grid = grids.agrid(amin=amin, amax=amax, n=nA)
     return e_grid, e_dist, Pi_ss, a_grid
 
-def alter_Pi(Pi_ss, shift):
+
+def Pi_shock(Pi_ss, shift):
     Pi = Pi_ss.copy()
     Pi[:, 0] -= shift
     Pi[:, -1] += shift
     return Pi
 
+
 def income(atw, N, e_grid, transfer):
     y = atw * N * e_grid + transfer
     return y
 
-# copy original household hetblock but get rid of _p on Va
+def marginal_utility(c, eis):
+    uc = c ** (-1 / eis)
+    return uc
+
+
+'''Hetblock'''
+
+
+hh_het = hh.add_hetinputs([income, make_grids, Pi_shock])
+hh_het = hh_het.add_hetoutputs([marginal_utility])
+
+
+'''StageBlock'''
+
+# same as hh just replace Va_p with Va
 def household_new(Va, a_grid, y, r, beta, eis):
     uc_nextgrid = beta * Va
     c_nextgrid = uc_nextgrid ** (-eis)
@@ -32,17 +54,26 @@ def household_new(Va, a_grid, y, r, beta, eis):
     Va = (1 + r) * c ** (-1 / eis)
     return Va, a, c
 
-def marginal_utility(c, eis):
-    uc = c ** (-1 / eis)
-    return uc
 
-#het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='stage1')
-het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='stage1', hetoutputs=[marginal_utility])
-hh2 = StageBlock([ExogenousMaker('Pi', 0, 'stage0'), het_stage], name='hh',
-                    backward_init=hh_init, hetinputs=(make_grids, income, alter_Pi))
+prod_stage = ExogenousMaker('Pi', 0, 'stage0')
+
+consav_stage = Continuous1D(backward='Va',
+                            policy='a',
+                            f=household_new,
+                            name='stage1',
+                            hetoutputs=[marginal_utility],
+                            monotonic=True
+)
+
+
+hh2 = StageBlock([prod_stage, consav_stage],
+                  name='hh',
+                  backward_init=hh_init,
+                  hetinputs=(make_grids, income, Pi_shock))
+
 
 def test_equivalence():
-    hh1 = hh.add_hetinputs([make_grids, income, alter_Pi]).add_hetoutputs([marginal_utility])
+    hh1 = hh.add_hetinputs([make_grids, income, Pi_shock]).add_hetoutputs([marginal_utility])
     calibration = {'r': 0.004, 'eis': 0.5, 'rho_e': 0.91, 'sd_e': 0.92, 'nE': 3,
                    'amin': 0.0, 'amax': 200, 'nA': 100, 'transfer': 0.143, 'N': 1,
                    'atw': 1, 'beta': 0.97, 'shift': 0}
@@ -89,7 +120,7 @@ def test_equivalence():
 
 def test_remap():
     # hetblock
-    hh1 = hh.add_hetinputs([make_grids, income, alter_Pi])
+    hh1 = hh.add_hetinputs([make_grids, income, Pi_shock])
     hh1_men = hh1.remap({k: k + '_men' for k in hh1.outputs | ['sd_e']}).rename('men')
     hh1_women = hh1.remap({k: k + '_women' for k in hh1.outputs | ['sd_e']}).rename('women')
     hh1_all = combine([hh1_men, hh1_women])
