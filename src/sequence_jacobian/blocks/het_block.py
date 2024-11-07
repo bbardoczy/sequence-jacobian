@@ -376,7 +376,7 @@ class HetBlock(Block):
         # and also affect aggregate outcomes today
         if differentiable_hetoutput is not None and (output_list & differentiable_hetoutput.outputs):
             shocked_outputs.update(differentiable_hetoutput.diff({**shocked_outputs, **din_dict}, outputs=differentiable_hetoutput.outputs & output_list))
-        curlyY = {k: np.vdot(D, shocked_outputs[k]) for k in output_list}
+        curlyY = {k: np.vdot(D, shocked_outputs[k]) if k in shocked_outputs else 0. for k in output_list}
 
         # add effects from perturbation to exog on beginning-of-period expectations in curlyV and curlyY
         if maybe_exog_shock:
