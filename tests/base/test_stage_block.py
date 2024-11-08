@@ -100,6 +100,7 @@ def test_equivalence():
         for o in outputs:
             if o == 'UC':
                 # not sure why numerical differences somewhat larger here?
+                # TODO: bug in differentiating hetoutputs i stage block
                 assert np.max(np.abs(J1[o, i] - J2[o, i])) < 2E-4
             else:
                 assert np.allclose(J1[o, i], J2[o, i])

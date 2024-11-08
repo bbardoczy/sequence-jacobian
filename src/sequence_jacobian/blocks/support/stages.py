@@ -32,9 +32,7 @@ class Stage:
 
         if hetoutputs and self.hetoutputs is not None:
             inputs = {**inputs, **outputs}
-            #report.update(self.hetoutputs(all_inputs))
-            # for some reason self.hetoutputs returns its inputs too, need to fix that
-            report.update({k: v for k, v in self.hetoutputs(inputs).items() if k in self.hetoutputs.outputs})
+            report.update(self.hetoutputs(inputs, self.hetoutputs.outputs))
 
         if lawofmotion:
             return (backward_outputs, report), lom
@@ -42,11 +40,6 @@ class Stage:
             return backward_outputs, report
 
     def __init__(self, hetoutputs=None):
-        # instance variables of a stage:
-        # self.name = ""
-        # self.backward_outputs = OrderedSet([])
-        # self.report = OrderedSet([])
-        # self.inputs = OrderedSet([])
 
         self.original_inputs = self.inputs.copy()
         self.original_report = self.report.copy()
@@ -199,13 +192,14 @@ class Exogenous(Stage):
         self.report = OrderedSet([])
         self.inputs = backward | [markov_name]
 
+        # process hetoutputs, if any
         super().__init__(hetoutputs)
 
     def __repr__(self):
         return f"<Stage-Exogenous '{self.name}' with Markov matrix '{self.markov_name}'>"
     
     def backward_step(self, inputs, lawofmotion=False):
-        Pi = Markov(inputs[self.markov_name], self.index)
+        Pi = Markov(self.index, inputs[self.markov_name])
         outputs = {k: Pi @ inputs[k] for k in self.backward_outputs}
 
         if not lawofmotion:
@@ -214,11 +208,13 @@ class Exogenous(Stage):
             return outputs, Pi.T
     
     def backward_step_shock(self, ss, shocks, precomputed=None):
-        Pi = Markov(ss[self.markov_name], self.index)
-        outputs = {k: Pi @ shocks[k] for k in self.backward_outputs if k in shocks}
+        # first term: Pi_ss @ dv_{j+1}
+        Pi_ss = Markov(self.index, ss[self.markov_name])
+        outputs = {k: Pi_ss @ shocks[k] for k in self.backward_outputs if k in shocks}
 
+        # second term: dPi @ v_{ss, j+1}
         if self.markov_name in shocks:
-            dPi = Markov(shocks[self.markov_name], self.index)
+            dPi = Markov(self.index, shocks[self.markov_name])
             for k in self.backward_outputs:
                 if k in outputs:
                     outputs[k] += dPi @ ss[k]
@@ -257,6 +253,7 @@ class LogitChoice(Stage):
         if f is not None:
             self.inputs |= f.inputs
 
+        # process hetoutputs, if any
         super().__init__(hetoutputs)
 
     def __repr__(self):
@@ -266,7 +263,7 @@ class LogitChoice(Stage):
         # start with value we're given
         V_next = inputs[self.value]
 
-        # add dimension at beginning to allow for choice, then swap (today's choice determines next stages's state)
+        # add dimension at beginning to allow for choice, then swap (today's choice determines next stage's state)
         V = V_next[np.newaxis, ...]
         V = np.swapaxes(V, 0, self.index+1)
 
@@ -274,18 +271,13 @@ class LogitChoice(Stage):
         if self.f is not None:
             flow_u = self.f(inputs)
             flow_u = next(iter(flow_u.values()))
-        else:
-            # create phantom state variable, convenient but bit wasteful
-            nchoice = V.shape[0]
-            flow_u = np.zeros((nchoice,) + V_next.shape)
-
-        V = flow_u + V
+            V = flow_u + V
         
         # calculate choice probabilities and expected value
         P, EV = logit_choice(V, inputs[self.taste_shock_scale])
         
         # make law of motion, use it to take expectations of everything else
-        lom = DiscreteChoice(P, self.index)
+        lom = DiscreteChoice(self.index, P)
 
         # take expectations
         outputs = {k: lom.T @ inputs[k] for k in self.backward}
@@ -308,11 +300,8 @@ class LogitChoice(Stage):
         if f is not None:
             dflow_u = f.diff(shocks)
             dflow_u = next(iter(dflow_u.values()))
-            dflow_u = np.nan_to_num(dflow_u)  # -inf - (-inf) = nan, want zeros
-        else:
-            dflow_u = np.zeros_like(lom.P)
-        
-        dV = dflow_u + dV
+            dflow_u = np.nan_to_num(dflow_u)         # -inf - (-inf) = nan, want zeros
+            dV = dflow_u + dV
 
         # simply take expectations to get shock to expected value function (envelope result)
         dEV = np.sum(lom.P * dV, axis=0)
@@ -320,7 +309,7 @@ class LogitChoice(Stage):
         # calculate shocks to choice probabilities (note nifty broadcasting of dEV)
         scale = ss[self.taste_shock_scale]
         dP = lom.P * (dV - dEV) / scale
-        dlom = DiscreteChoice(dP, self.index)
+        dlom = DiscreteChoice(self.index, dP)
 
         # find shocks to outputs, aggregate everything of interest
         doutputs = {self.value: dEV}

@@ -2,7 +2,6 @@ import numpy as np
 from . import het_compiled
 from ...utilities.interpolate import interpolate_coord_robust, interpolate_coord
 from ...utilities.multidim import batch_multiply_ith_dimension, multiply_ith_dimension
-from typing import Optional, Sequence, Any, List, Tuple, Union
 import copy
 
 class LawOfMotion:
@@ -16,7 +15,47 @@ class LawOfMotion:
     @property
     def T(self):
         pass
+    
 
+class Markov(LawOfMotion):
+    def __init__(self, i, Pi):
+        self.i = i      # axis of state that gets updated
+        self.Pi = Pi    # transition matrix Pi(s_i, s_i')
+
+    @property
+    def T(self):
+        newself = copy.copy(self)
+        newself.Pi = newself.Pi.T
+        if isinstance(newself.Pi, np.ndarray):
+            # optimizing: copy to get right order in memory
+            newself.Pi = newself.Pi.copy()
+        return newself
+
+    def __matmul__(self, X):
+        return multiply_ith_dimension(self.Pi, self.i, X)
+
+
+class DiscreteChoice(LawOfMotion):
+    def __init__(self, i, P):
+        self.i = i      # axis of state that gets updated
+        self.P = P      # choice prob P(d|...s_i...), 0 for unavailable choices
+
+        # cache "transposed" version of this, since we'll always need both
+        self.forward = True
+        self.P_T = P.swapaxes(0, 1+self.i).copy()
+
+    @property
+    def T(self):
+        newself = copy.copy(self)
+        newself.forward = not self.forward
+        return newself
+
+    def __matmul__(self, X):
+        if self.forward:
+            return batch_multiply_ith_dimension(self.P, self.i, X)
+        else:
+            return batch_multiply_ith_dimension(self.P_T, self.i, X)
+    
 
 def lottery_1d(a, a_grid, monotonic=False):
     if not monotonic:
@@ -26,12 +65,11 @@ def lottery_1d(a, a_grid, monotonic=False):
 
 
 class PolicyLottery1D(LawOfMotion):
-    # TODO: always operates on final dimension, make more general!
+    """Assumed to act on last axis."""
     def __init__(self, i, pi, grid, forward=True):
         # flatten non-policy dimensions into one because that's what methods accept
         self.i = i.reshape((-1,) + grid.shape)
         self.flatshape = self.i.shape
-
         self.pi = pi.reshape(self.flatshape)
 
         # but store original shape so we can convert all outputs to it
@@ -71,7 +109,7 @@ def lottery_2d(a, b, a_grid, b_grid, monotonic=False):
     if monotonic:
         # right now we have no monotonic 2D examples, so this shouldn't be called
         return PolicyLottery2D(*interpolate_coord(a_grid, a),
-                           *interpolate_coord(b_grid, b), a_grid, b_grid)
+                               *interpolate_coord(b_grid, b), a_grid, b_grid)
 
 
 class PolicyLottery2D(LawOfMotion):
@@ -115,44 +153,3 @@ class ShockedPolicyLottery2D(PolicyLottery2D):
             return het_compiled.forward_policy_shock_2d(X.reshape(self.flatshape), self.i, self.pi).reshape(self.shape)
         else:
             raise NotImplementedError
-
-
-class Markov(LawOfMotion):
-    def __init__(self, Pi, i):
-        self.Pi = Pi
-        self.i = i
-
-    @property
-    def T(self):
-        newself = copy.copy(self)
-        newself.Pi = newself.Pi.T
-        if isinstance(newself.Pi, np.ndarray):
-            # optimizing: copy to get right order in memory
-            newself.Pi = newself.Pi.copy()
-        return newself
-
-    def __matmul__(self, X):
-        return multiply_ith_dimension(self.Pi, self.i, X)
-
-
-class DiscreteChoice(LawOfMotion):
-    def __init__(self, P, i):
-        self.P = P                     # choice prob P(d|...s_i...), 0 for unavailable choices
-        self.i = i                     # dimension of state space that will be updated
-
-        # cache "transposed" version of this, since we'll always need both!
-        self.forward = True
-        self.P_T = P.swapaxes(0, 1+self.i).copy()
-
-    @property
-    def T(self):
-        newself = copy.copy(self)
-        newself.forward = not self.forward
-        return newself
-
-    def __matmul__(self, X):
-        if self.forward:
-            return batch_multiply_ith_dimension(self.P, self.i, X)
-        else:
-            return batch_multiply_ith_dimension(self.P_T, self.i, X)
-    
