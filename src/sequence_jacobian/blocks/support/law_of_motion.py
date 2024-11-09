@@ -38,7 +38,7 @@ class Markov(LawOfMotion):
 class DiscreteChoice(LawOfMotion):
     def __init__(self, i, P):
         self.i = i      # axis of state that gets updated
-        self.P = P      # choice prob P(d|...s_i...), 0 for unavailable choices
+        self.P = P      # choice prob P(s_i'|...s_i...)
 
         # cache "transposed" version of this, since we'll always need both
         self.forward = True
