@@ -57,29 +57,30 @@ class ImpulseDict(ResultDict):
     def __abs__(self):
         return self.unary_operation(lambda a: abs(a))
 
+    #TODO: define operations for internals so that they work for both hetblock and stageblock
     def binary_operation(self, other, op):
         if isinstance(other, (SteadyStateDict, ImpulseDict)):
             toplevel = {k: op(v, other[k]) for k, v in self.toplevel.items()}
-            internals = {}
-            for b in self.internals:
-                other_internals = other.internals[b]
-                internals[b] = {k: op(v, other_internals[k]) for k, v in self.internals[b].items()} 
-            return ImpulseDict(toplevel, internals, self.T)
+            # internals = {}
+            # for b in self.internals:
+            #     other_internals = other.internals[b]
+            #     internals[b] = {k: op(v, other_internals[k]) for k, v in self.internals[b].items()} 
+            return ImpulseDict(toplevel, self.internals, self.T)
         elif isinstance(other, (float, int)):
             toplevel = {k: op(v, other) for k, v in self.toplevel.items()}
-            internals = {}
-            for b in self.internals:
-                internals[b] = {k: op(v, other) for k, v in self.internals[b].items()} 
-            return ImpulseDict(toplevel, internals, self.T)
+            # internals = {}
+            # for b in self.internals:
+            #     internals[b] = {k: op(v, other) for k, v in self.internals[b].items()} 
+            return ImpulseDict(toplevel, self.internals, self.T)
         else:
             return NotImplementedError(f'Can only perform operations with ImpulseDicts and other ImpulseDicts, SteadyStateDicts, or numbers, not {type(other).__name__}')
 
     def unary_operation(self, op):
         toplevel = {k: op(v) for k, v in self.toplevel.items()}
-        internals = {}
-        for b in self.internals:
-            internals[b] = {k: op(v) for k, v in self.internals[b].items()} 
-        return ImpulseDict(toplevel, internals, self.T)
+        # internals = {}
+        # for b in self.internals:
+        #     internals[b] = {k: op(v) for k, v in self.internals[b].items()} 
+        return ImpulseDict(toplevel, self.internals, self.T)
         
     def pack(self):
         T = self.T

@@ -74,6 +74,8 @@ class StageBlock(Block):
                 
     def __repr__(self):
         return f"<StageBlock '{self.name}' with stages {[k.name for k in self.stages]}>"
+
+    '''Steady state'''
     
     def _steady_state(self, calibration, backward_tol=1E-9, backward_maxit=5000,
                       forward_tol=1E-10, forward_maxit=100_000):
@@ -111,7 +113,7 @@ class StageBlock(Block):
 
         # iterate until v_0 converges
         for it in range(maxit):
-            backward_new = self.backward_step_ss(backward, ss)
+            backward_new = self.backward_step_value(backward, ss)
             if it % 10 == 0 and all(within_tolerance(backward_new[k], backward[k], tol) for k in backward):
                 break
             backward = backward_new
@@ -119,16 +121,16 @@ class StageBlock(Block):
             raise ValueError(f'No convergence after {maxit} backward iterations!')
         
         # get v_j, y_j, Λ_j' for all j
-        return self.backward_step_ss_report(backward_new, ss)
+        return self.backward_step_all(backward_new, ss)
 
-    def backward_step_ss(self, backward, inputs):
+    def backward_step_value(self, backward, inputs):
         """Iterate backward through all stages for a single period, ignoring reported outputs"""
         for stage in reversed(self.stages):
             backward = stage.backward_step({**inputs, **backward}, return_lom=False, return_out=False)
         return backward
     
-    def backward_step_ss_report(self, backward, inputs):
-        backward_all = [backward]           # start from continuation value v_{J}
+    def backward_step_all(self, backward, inputs):
+        backward_all = []
         lom_all = []
         for stage in reversed(self.stages):
             backward, lom = stage.backward_step({**inputs, **backward}, return_lom=True, return_out=True)
@@ -136,7 +138,7 @@ class StageBlock(Block):
             lom_all.append(lom)             # append Λ_j'
 
         # return v_j, y_j, Λ_j' for j = 0, 1, ..., J-1
-        return backward_all[::-1][:-1], lom_all[::-1]
+        return backward_all[::-1], lom_all[::-1]
     
     def forward_steady_state(self, ss, lom: List[LawOfMotion], tol, maxit):
         # initial guess for D_0
@@ -157,20 +159,102 @@ class StageBlock(Block):
             raise ValueError(f'No convergence after {maxit} forward iterations!')
 
         # return D_j for j = 0, 1, ..., J-1
-        return self.forward_step_ss_report(D, lom)
+        D, _ = self.forward_step_all(D, lom)
+        return D
 
     def forward_step_steady_state(self, D, loms: List[LawOfMotion]):
         for lom in loms:
             D = lom @ D
         return D
     
-    def forward_step_ss_report(self, D, loms: List[LawOfMotion]):
+    def forward_step_all(self, D, loms: List[LawOfMotion]):
         Ds = [D]
         for i, lom in enumerate(loms):
             Ds.append(lom @ Ds[i])
-        # return D_j for j=0, 1, ..., J-1
-        return Ds[:-1]
+        # return D_j for j=0, 1, ..., J-1 and D_J
+        return Ds[:-1], Ds[-1]
+    
+    '''Impulse nonlinear'''
 
+    def _impulse_nonlinear(self, ssin, inputs, outputs, internals, ss_initial):
+        """inputs is dict of deviations from ss"""
+        ss = self.extract_ss_dict(ssin)
+        if ss_initial is not None:
+            ss[self.stages[0].name]['D'] = ss_initial[self.name][self.stages[0].name]['D']
+
+        # get v_{t,j}, y_{t,j}, Λ_{t,j}' for j = 0, 1, ..., J-1 and t = 0, 1, ..., T-1
+        out_path, lom_path = self.backward_nonlinear(ss, inputs)
+
+        # get D_{t,j} for j = 0, 1, ..., J-1 and t = 0, 1, ..., T-1 
+        D_path = self.forward_nonlinear(ss, lom_path)
+
+        aggregates = {}
+        internals_dict = {}
+        for stage in self.stages:
+            # get Y_{t, j} for j = 0, 1, ..., J-1 and t = 0, 1, ..., T-1
+            for o in stage.outputs:
+                k = o.upper()
+                if k in outputs:
+                    aggregates[k] = utils.optimized_routines.fast_aggregate(D_path[stage.name], out_path[stage.name][o])
+
+            # save y_{t,j} and D_{t,j} 
+            if stage.name in internals:
+                internals_dict[stage.name] = {**out_path[stage.name], 'D': D_path[stage.name]}
+
+            # save Λ_{t,j}'
+            if 'law_of_motion' in internals:
+                internals_dict['law_of_motion'] = lom_path
+
+            # save hetinputs
+            if 'hetinputs' in internals:
+                internals_dict['hetinputs'] = out_path['hetinputs']
+
+        return ImpulseDict(aggregates, {self.name: internals_dict}, T=inputs.T) - ssin
+
+    def backward_nonlinear(self, ss, inputs):
+        indict = ss.copy()
+        T = inputs.T
+
+        # initialize with v_{ss, J}
+        backward = {k: ss[self.stages[0].name][k] for k in self.stages[0].backward}
+
+        # container for y_{t, j} is dict(stage: {output: TxN-dim array})
+        out_path = {stage.name: {o: np.empty((T,) + ss[stage.name][o].shape) for o in stage.outputs} for stage in self.stages}
+        out_path['hetinputs'] = {o: np.empty((T,) + ss[o].shape) for o in self.hetinputs.outputs}
+        lom_path = []
+
+        for t in reversed(range(T)):
+            indict.update({k: ss[k] + v[t, ...] for k, v in inputs.items()})
+            hetinputs = self.return_hetinputs(indict)
+            indict.update(hetinputs)
+
+            # v_{t,0} is terminal condition for period t-1
+            out_t, lom_t = self.backward_step_all(backward, indict)
+            backward = {k: out_t[0][k] for k in self.stages[0].backward}
+
+            for j, stage in enumerate(self.stages):
+                for o in stage.outputs:  
+                    out_path[stage.name][o][t, ...] = out_t[j][o]
+
+            for o in self.hetinputs.outputs:
+                out_path['hetinputs'][o][t, ...] = hetinputs[o]
+
+            lom_path.append(lom_t)
+
+        return out_path, lom_path[::-1]
+    
+    def forward_nonlinear(self, ss, lom_path):
+        T = len(lom_path)
+        Dbeg = ss[self.stages[0].name]['D']
+        D_path = {stage.name: np.empty((T,) + ss[stage.name]['D'].shape) for stage in self.stages}
+
+        for t in range(T):
+            D, Dbeg = self.forward_step_all(Dbeg, lom_path[t])
+            
+            for j, stage in enumerate(self.stages):
+                D_path[stage.name][t, ...] = D[j]
+
+        return D_path
     
     '''HetInput and HetOutput options and processing'''
     
@@ -183,7 +267,7 @@ class StageBlock(Block):
         if hetinputs is not None:
             inputs |= hetinputs.inputs
             inputs -= hetinputs.outputs
-            internals |= hetinputs.outputs
+            internals |= ['hetinputs']
 
         self.inputs = inputs
         self.internals = internals

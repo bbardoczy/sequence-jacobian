@@ -106,19 +106,23 @@ def test_equivalence():
     #         else:
     #             assert np.allclose(J1[o, i], J2[o, i])
 
-    # # impulse linear
-    # shock = ImpulseDict({'r': 0.5 ** np.arange(20)})
+    # impulse linear
+    shock = ImpulseDict({'shift': 0.5 ** np.arange(20)})
     # td_lin1 = hh1.impulse_linear(ss1, shock, outputs=['C', 'UC'])
     # td_lin2 = hh2.impulse_linear(ss2, shock, outputs=['C', 'UC'])
     # assert np.allclose(td_lin1['C'], td_lin2['C'])
     # assert np.max(np.abs(td_lin1['UC'] - td_lin2['UC'])) < 2E-4
 
-    # # impulse nonlinear
-    # td_nonlin1 = hh1.impulse_nonlinear(ss1, shock * 1E-4, outputs=['C', 'UC'])
-    # td_nonlin2 = hh2.impulse_nonlinear(ss2, shock * 1E-4, outputs=['C', 'UC'])
-    # assert np.allclose(td_nonlin1['C'], td_nonlin2['C'])
-    # assert np.allclose(td_nonlin1['UC'], td_nonlin2['UC'])
+    # impulse nonlinear
+    td_nonlin1 = hh1.impulse_nonlinear(ss1, shock * 1E-4, outputs=['C', 'UC'], internals=['hh'])
+    td_nonlin2 = hh2.impulse_nonlinear(ss2, shock * 1E-4, outputs=['C', 'UC'], internals=['hh'])
+    assert np.allclose(td_nonlin1['C'], td_nonlin2['C'])
+    assert np.allclose(td_nonlin1['UC'], td_nonlin2['UC'])
+    assert np.allclose(td_nonlin1.internals['hh']['uc'], td_nonlin2.internals['hh']['stage1']['uc'])
+    assert np.allclose(td_nonlin1.internals['hh']['Pi'], td_nonlin2.internals['hh']['hetinputs']['Pi'])
 
+
+# test_equivalence()
 
 # def test_remap():
 #     # hetblock
