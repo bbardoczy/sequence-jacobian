@@ -167,6 +167,29 @@ class Exogenous(Stage):
             return outputs
         else:
             return outputs, Pi
+
+    def backward_step_shock(self, ss, shocks):
+        # first term: Pi_ss @ dv_{j+1}
+        if len(ss[self.markov_name].shape) == 2:
+            Pi_ss = Markov(self.index, ss[self.markov_name].T)
+        elif len(ss[self.markov_name].shape) > 2:
+            Pi_ss = DiscreteChoice(self.index, ss[self.markov_name])
+        outputs = {k: Pi_ss.T @ shocks[k] for k in self.backward if k in shocks}
+
+        # second term: dPi.T @ v_{ss, j+1}, potentially dPi.T @ y_{ss, j} if there are hetoutputs
+        if self.markov_name in shocks:
+            if len(ss[self.markov_name].shape) == 2:
+                dPi = Markov(self.index, shocks[self.markov_name].T)
+            else:
+                dPi = DiscreteChoice(self.index, shocks[self.markov_name])
+            for k in  self.backward | self.outputs:
+                if k in outputs:
+                    outputs[k] += dPi.T @ ss[k]
+                else:
+                    outputs[k] = dPi.T @ ss[k]
+            return outputs, dPi
+        else:
+            return outputs
         
 
 class LogitChoice(Stage):
