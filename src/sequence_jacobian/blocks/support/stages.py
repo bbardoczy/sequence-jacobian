@@ -169,6 +169,7 @@ class Exogenous(Stage):
             return outputs, Pi
 
     def backward_step_shock(self, ss, shocks):
+        # TODO: this is untested, have to rewrite the jacobian method and turn back on tests
         # first term: Pi_ss @ dv_{j+1}
         if len(ss[self.markov_name].shape) == 2:
             Pi_ss = Markov(self.index, ss[self.markov_name].T)
