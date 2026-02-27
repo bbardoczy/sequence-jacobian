@@ -133,6 +133,29 @@ class Markov(LawOfMotion):
 
     def __matmul__(self, X):
         return multiply_ith_dimension(self.Pi, self.i, X)
+    
+
+class ConditionalMarkov(LawOfMotion):
+    """Let Markov matrix depend on all other states as well."""
+    def __init__(self, P, i):
+        self.P = P                     # choice prob P(s_i'|...s_i...)
+        self.i = i                     # dimension of state space that will be updated
+
+        # cache "transposed" version of this, since we'll always need both!
+        self.forward = True
+        self.P_T = P.swapaxes(0, 1+self.i).copy()
+
+    @property
+    def T(self):
+        newself = copy.copy(self)
+        newself.forward = not self.forward
+        return newself
+
+    def __matmul__(self, X):
+        if self.forward:
+            return batch_multiply_ith_dimension(self.P, self.i, X)
+        else:
+            return batch_multiply_ith_dimension(self.P_T, self.i, X)
 
 
 class DiscreteChoice(LawOfMotion):

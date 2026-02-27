@@ -11,11 +11,14 @@ def make_grids(rho_e, sd_e, nE, amin, amax, nA):
     a_grid = grids.agrid(amin=amin, amax=amax, n=nA)
     return e_grid, e_dist, Pi_ss, a_grid
 
-def alter_Pi(Pi_ss, shift):
-    Pi = Pi_ss.copy()
+def alter_Pi(Pi_ss, shift, nA):
+    Pi = Pi_ss.copy()  # (z, z')
     Pi[:, 0] -= shift
     Pi[:, -1] += shift
-    return Pi
+
+    Pi_T = Pi.T
+    Pibig = np.broadcast_to(Pi_T[..., np.newaxis], Pi.shape + (nA,)) # (z', z, a)
+    return Pi, Pibig
 
 def income(atw, N, e_grid, transfer):
     y = atw * N * e_grid + transfer
@@ -36,9 +39,10 @@ def marginal_utility(c, eis):
     uc = c ** (-1 / eis)
     return uc
 
-#het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='stage1')
 het_stage = Continuous1D(backward='Va', policy='a', f=household_new, name='stage1', hetoutputs=[marginal_utility])
 hh2 = StageBlock([ExogenousMaker('Pi', 0, 'stage0'), het_stage], name='hh',
+                    backward_init=hh_init, hetinputs=(make_grids, income, alter_Pi))
+hh3 = StageBlock([ExogenousMaker('Pibig', 0, 'stage0'), het_stage], name='hh',
                     backward_init=hh_init, hetinputs=(make_grids, income, alter_Pi))
 
 def test_equivalence():
@@ -48,6 +52,7 @@ def test_equivalence():
                    'atw': 1, 'beta': 0.97, 'shift': 0}
     ss1 = hh1.steady_state(calibration)
     ss2 = hh2.steady_state(calibration)
+    ss3 = hh3.steady_state(calibration)
 
     # test steady-state equivalence
     assert np.isclose(ss1['A'], ss2['A'])
@@ -56,6 +61,7 @@ def test_equivalence():
     assert np.allclose(ss1.internals['hh']['a'], ss2.internals['hh']['stage1']['a'])
     assert np.allclose(ss1.internals['hh']['c'], ss2.internals['hh']['stage1']['c'])
     assert np.allclose(ss1.internals['hh']['Va'], ss2.internals['hh']['stage0']['Va'])
+    assert np.allclose(ss2.internals['hh']['stage0']['Va'], ss3.internals['hh']['stage0']['Va'])
 
     # find Jacobians...
     inputs = ['r', 'atw', 'shift']
@@ -63,6 +69,7 @@ def test_equivalence():
     T = 200
     J1 = hh1.jacobian(ss1, inputs, outputs, T)
     J2 = hh2.jacobian(ss2, inputs, outputs, T)
+    J3 = hh3.jacobian(ss3, inputs, outputs, T)
 
     # test Jacobian equivalence
     for i in inputs:
@@ -72,19 +79,25 @@ def test_equivalence():
                 assert np.max(np.abs(J1[o, i] - J2[o, i])) < 2E-4
             else:
                 assert np.allclose(J1[o, i], J2[o, i])
+                assert np.allclose(J2[o, i], J3[o, i])
 
     # impulse linear
     shock = ImpulseDict({'r': 0.5 ** np.arange(20)})
     td_lin1 = hh1.impulse_linear(ss1, shock, outputs=['C', 'UC'])
     td_lin2 = hh2.impulse_linear(ss2, shock, outputs=['C', 'UC'])
+    td_lin3 = hh3.impulse_linear(ss3, shock, outputs=['C', 'UC'])
     assert np.allclose(td_lin1['C'], td_lin2['C'])
+    assert np.allclose(td_lin2['C'], td_lin3['C'])
     assert np.max(np.abs(td_lin1['UC'] - td_lin2['UC'])) < 2E-4
 
     # impulse nonlinear
-    td_nonlin1 = hh1.impulse_nonlinear(ss1, shock * 1E-4, outputs=['C', 'UC'])
-    td_nonlin2 = hh2.impulse_nonlinear(ss2, shock * 1E-4, outputs=['C', 'UC'])
+    td_nonlin1 = hh1.impulse_nonlinear(ss1, shock * 1E-4, outputs=['C', 'UC'], internals=['hh'])
+    td_nonlin2 = hh2.impulse_nonlinear(ss2, shock * 1E-4, outputs=['C', 'UC'], internals=['hh'])
+    td_nonlin3 = hh3.impulse_nonlinear(ss3, shock * 1E-4, outputs=['C', 'UC'], internals=['hh'])
     assert np.allclose(td_nonlin1['C'], td_nonlin2['C'])
+    assert np.allclose(td_nonlin2['C'], td_nonlin3['C'])
     assert np.allclose(td_nonlin1['UC'], td_nonlin2['UC'])
+    assert np.allclose(td_nonlin1.internals['hh']['c'], td_nonlin2.internals['hh']['stage1']['c'], atol=1.e-6)
 
 
 def test_remap():

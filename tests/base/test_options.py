@@ -56,3 +56,9 @@ def test_steady_state_solution(krusell_smith_dag):
     with pytest.raises(ValueError):
         ss3 = dag_ss.solve_steady_state(calibration, unknowns_ss, targets_ss, 
                                         solver="newton")
+
+    # prevent from converging 
+    with pytest.raises(ValueError):
+        ss3 = dag_ss.solve_steady_state(calibration, unknowns_ss, targets_ss, 
+                                        options={'hh': {'backward_maxit': 10}})
+    

@@ -65,7 +65,6 @@ def test_hank_td(one_asset_hank_dag):
     assert np.linalg.norm(dC_nonlin - dC_lin, np.inf) < 3e-3
 
 
-# TODO: needs to compute Jacobian of hetoutput `Chi`
 def test_two_asset_td(two_asset_hank_dag):
     _, ss, two_asset_model, unknowns, targets, exogenous = two_asset_hank_dag
 

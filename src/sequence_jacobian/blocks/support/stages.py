@@ -9,7 +9,7 @@ from ...utilities.ordered_set import OrderedSet
 from ...utilities.misc import make_tuple, logit_choice
 from .law_of_motion import (lottery_1d, ShockedPolicyLottery1D,
                             lottery_2d, ShockedPolicyLottery2D,
-                            Markov)
+                            Markov, ConditionalMarkov)
 
 class Stage:
     def backward_step(self, inputs, lawofmotion=False):
@@ -204,22 +204,38 @@ class Exogenous(Stage):
 
     def __repr__(self):
         return f"<Stage-Exogenous '{self.name}' with Markov matrix '{self.markov_name}'>"
+
     
     def backward_step(self, inputs, lawofmotion=False):
-        Pi = Markov(inputs[self.markov_name], self.index)
+        if inputs[self.markov_name].ndim == 2:
+            Pi = Markov(inputs[self.markov_name], self.index)
+        elif inputs[self.markov_name].ndim > 2:
+            Pi = ConditionalMarkov(inputs[self.markov_name], self.index)
+            Pi = Pi.T
+
         outputs = {k: Pi @ inputs[k] for k in self.backward_outputs}
 
         if not lawofmotion:
             return outputs
         else:
             return outputs, Pi.T
+
     
     def backward_step_shock(self, ss, shocks, precomputed=None):
-        Pi = Markov(ss[self.markov_name], self.index)
+        if ss[self.markov_name].ndim == 2:
+            Pi = Markov(ss[self.markov_name], self.index)
+        elif ss[self.markov_name].ndim > 2:
+            Pi = ConditionalMarkov(ss[self.markov_name], self.index)
+            Pi = Pi.T
+
         outputs = {k: Pi @ shocks[k] for k in self.backward_outputs if k in shocks}
 
         if self.markov_name in shocks:
-            dPi = Markov(shocks[self.markov_name], self.index)
+            if ss[self.markov_name].ndim == 2:
+                dPi = Markov(shocks[self.markov_name], self.index)
+            elif ss[self.markov_name].ndim > 2:
+                dPi = ConditionalMarkov(shocks[self.markov_name], self.index)
+                dPi = dPi.T
             for k in self.backward_outputs:
                 if k in outputs:
                     outputs[k] += dPi @ ss[k]

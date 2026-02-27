@@ -25,8 +25,6 @@ class StageBlock(Block):
             # external inputs are whatever you don't take from next stage
             inputs |= (stage.inputs - stages[(i+1) % len(stages)].backward_outputs)
             outputs |= stage.report
-        
-        # TODO: should have internals
 
         self.constructor_checks(stages, inputs, outputs)
         self.stages = stages
@@ -34,6 +32,12 @@ class StageBlock(Block):
         self.outputs = OrderedSet([o.upper() for o in outputs])
         self.M_outputs = Bijection({o: o.upper() for o in outputs})
         self.save_original()
+
+        # can narrow down what internals are reported:
+        #   - `law_of_motion`
+        #   - `stage.name` 
+        # but not output within a specific stage
+        self.internals = OrderedSet(['law_of_motion']) | [s.name for s in self.stages]
 
         if name is None:
             name = stages[0].name + "_to_" + stages[-1].name
@@ -111,10 +115,10 @@ class StageBlock(Block):
 
         return SteadyStateDict(aggregates, {self.name: internals})
 
-    def _impulse_nonlinear(self, ssin, inputs, outputs, ss_initial):
+    def _impulse_nonlinear(self, ssin, inputs, outputs, internals, ss_initial):
         ss = self.extract_ss_dict(ssin)
         if ss_initial is not None:
-            ss[self.stages[0].name]['D'] = ss_initial[self.name][self.stages[0].name]['D']
+            ss[self.stages[0].name]['D'] = ss_initial.internals[self.name][self.stages[0].name]['D']
 
         # report_path is dict(stage: {output: TxN-dim array})
         # lom_path is list[t][stage] in chronological order
@@ -124,12 +128,21 @@ class StageBlock(Block):
         D_path = self.forward_nonlinear(ss, lom_path)
 
         aggregates = {}
+        internals_dict = {}
         for stage in self.stages:
             for o in stage.report:
                 if self.M_outputs @ o in outputs:
                     aggregates[self.M_outputs @ o] = utils.optimized_routines.fast_aggregate(D_path[stage.name], report_path[stage.name][o])
+            
+            # save micro outputs (report) and distribution under stage name
+            if stage.name in internals:
+                internals_dict[stage.name] = {**report_path[stage.name], 'D': D_path[stage.name]}
+        
+        # save sequence of laws of motion separately (breaking up by stage seems inefficient)
+        if 'law_of_motion' in internals:
+            internals_dict['law_of_motion'] = lom_path
 
-        return ImpulseDict(aggregates, T=inputs.T) - ssin
+        return ImpulseDict(aggregates, {self.name: internals_dict}, T=inputs.T) - ssin
 
     def _impulse_linear(self, ss, inputs, outputs, Js):
         return ImpulseDict(self._jacobian(ss, list(inputs.keys()), outputs, inputs.T).apply(inputs))
@@ -490,21 +503,10 @@ class StageBlock(Block):
         # self.original_internals = self.internals
         self.original_M_outputs = self.M_outputs
 
-    '''Flexible expectation vectors'''
-
-    # TODO: this is wrong; can we make something like this work?
-    # def preliminary_expectations(self, ss, loms=None):
-    #     """allow for arbitrary loms, not the ones from ss; useful for counterfactuals"""
-    #     # loms is Dict[stage.name: lom] in forward order
-    #     expectations_data = []
-    #     for stage in reversed(self.stages):
-    #         report = {k: ss[stage.name][k] for k in stage.report}
-    #         if loms is None:
-    #             lom = ss[stage.name]['law_of_motion']
-    #         else:
-    #             lom = loms[stage.name]
-    #         expectations_data.append((report, lom.T))
-    #     return expectations_data
+    '''Flexible expectation vectors
+    
+    Next two functions are here for legacy reasons for Bence's JMP. There is a better version of these functions.
+    '''
     
 
     def expectation_vectors_level(self, o, T, expectations_data):
