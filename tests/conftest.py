@@ -1,6 +1,12 @@
 """Fixtures used by tests."""
 
+import sys
+from pathlib import Path
+
 import pytest
+
+# Ensure tests can import the package without requiring editable install.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from sequence_jacobian.examples import rbc, krusell_smith, hank, two_asset
 

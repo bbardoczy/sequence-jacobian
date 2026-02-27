@@ -122,8 +122,6 @@ def test_equivalence():
     assert np.allclose(td_nonlin1.internals['hh']['Pi'], td_nonlin2.internals['hh']['hetinputs']['Pi'])
 
 
-# test_equivalence()
-
 # def test_remap():
 #     # hetblock
 #     hh1 = hh.add_hetinputs([make_grids, income, Pi_shock])
