@@ -1,0 +1,58 @@
+# Development environment for sequence-jacobian.
+#
+# Create with:  mamba env create -f ./environment.yml
+# Update with:  mamba env update -f ./environment.yml --prune
+#
+# Run from the repo root: the `-e .` entry below resolves relative to this
+# file's directory.
+name: ssj-develop
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.13
+
+  # BLAS/LAPACK. Pinned to OpenBLAS for two independent reasons -- do not drop
+  # this pin, conda-forge defaults to MKL on win-64 and you will get both back:
+  #
+  # 1. CORRECTNESS. MKL's default (INTEL) threading layer hard-crashes the
+  #    interpreter here: np.linalg.solve dies with Windows fatal exception
+  #    0xc06d007f (delay-load failure), no traceback. conda-forge ships
+  #    libiomp5md.dll as a forwarder stub to libomp.dll rather than Intel's real
+  #    runtime, and it fails on this Core Ultra (Lunar Lake) hybrid CPU.
+  #    Reproduced on mkl 2025.3.1, 2026.0.0 and 2026.1.0 -- pinning an older MKL
+  #    does not help. Only MKL_THREADING_LAYER=TBB or SEQUENTIAL avoid it.
+  #
+  # 2. SPEED. Benchmarked, MKL is 2-4x faster than OpenBLAS at raw LAPACK LU/
+  #    solve -- but that only applies to ~6% of a real solve, and the TBB layer
+  #    we would be forced onto costs more than that in per-call overhead across
+  #    the many small BLAS ops this code makes. Measured end-to-end on two-asset
+  #    HANK, OpenBLAS beat MKL+TBB at every size tested (T=300 through T=1200);
+  #    the gap does not close as T grows.
+  #
+  # Re-test with `python -c "import numpy as np; np.linalg.solve(np.eye(3), np.ones(3))"`
+  # before changing this.
+  - libblas=*=*openblas
+
+  # Runtime dependencies of the package (see setup.cfg).
+  - numpy
+  - scipy
+  - numba
+
+  # Testing.
+  - pytest
+
+  # Notebooks under notebooks/.
+  - ipykernel
+  - nbconvert
+  - matplotlib
+
+  # Optional: enables sequence_jacobian.utilities.drawdag for DAG plots.
+  - python-graphviz
+
+  # Install the package itself in editable mode, so `import sequence_jacobian`
+  # resolves to src/ and pytest can import tests/conftest.py.
+  - pip
+  - pip:
+    - -e .

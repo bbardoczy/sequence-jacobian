@@ -8,7 +8,7 @@ The conceptual framework is based on our paper Adrien Auclert, Bence Bardóczy, 
 
 ## Requirements and installation
 
-SSJ runs on Python 3.7 or newer, and requires Python's core numerical libraries (NumPy, SciPy, Numba). We recommend that you first install the latest [Anaconda](https://www.anaconda.com/distribution/) distribution. This includes all of the packages and tools that you will need to run our code. 
+SSJ runs on Python 3.9 or newer, and requires Python's core numerical libraries (NumPy, SciPy, Numba). We recommend that you first install the latest [Anaconda](https://www.anaconda.com/distribution/) distribution. This includes all of the packages and tools that you will need to run our code. 
 
 To install SSJ, open a terminal and type
 ```
