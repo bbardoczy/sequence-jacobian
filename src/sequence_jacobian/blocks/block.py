@@ -257,7 +257,8 @@ class Block:
 
         if H_U_factored is None:
             H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs).pack(T)
-            U_Z = JacobianDict.unpack(-np.linalg.solve(H_U, H_Z.pack(T)), unknowns, inputs, T)
+            U_Z = JacobianDict.unpack(-np.linalg.solve(H_U, H_Z.pack(T)), unknowns, inputs, T,
+                                      name=f'{self.name}_U_Z')
         else:
             U_Z = H_U_factored @ H_Z
 

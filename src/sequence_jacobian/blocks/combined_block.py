@@ -105,7 +105,10 @@ class CombinedBlock(Block, Parent, DAG):
         Js = self._partial_jacobians(ss, inputs, outputs, T, Js, options)
 
         original_outputs = outputs
-        total_Js = JacobianDict.identity(inputs)
+        # Name it after this block, as leaf blocks do, so that a precomputed
+        # Jacobian carries the identity of what produced it into any DAG it
+        # is later embedded in.
+        total_Js = JacobianDict.identity(inputs, name=self.name)
 
         # TODO: horrible, redoing work from partial_jacobians, also need more efficient sifting of intermediates!
         vector_valued = ss._vector_valued()

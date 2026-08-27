@@ -49,7 +49,7 @@ class NestedDict:
 
     def __or__(self, other):
         # non-in-place merge: make a copy, then update
-        merged = type(self)(self.nesteddict, self.outputs, self.inputs)
+        merged = type(self)(self.nesteddict, self.outputs, self.inputs, name=self.name)
         merged.update(other)
         return merged
 
@@ -72,10 +72,12 @@ class NestedDict:
             else:
                 # case 2c: multiple outputs, one or more inputs, return NestedDict with outputs o and inputs i
                 i = (i,) if isinstance(i, str) else i
-                return type(self)({oo: subdict(self.nesteddict[oo], i) for oo in o}, o, i)
+                return type(self)({oo: subdict(self.nesteddict[oo], i) for oo in o}, o, i,
+                                  name=self.name)
         elif isinstance(x, OrderedSet) or isinstance(x, list) or isinstance(x, set):
             # case 3: assume that list or set refers just to outputs, get all of those
-            return type(self)({oo: self.nesteddict[oo] for oo in x}, x, self.inputs)
+            return type(self)({oo: self.nesteddict[oo] for oo in x}, x, self.inputs,
+                              name=self.name)
         else:
             raise ValueError(f'Tried to get impermissible item {x}')
 
@@ -125,8 +127,8 @@ class JacobianDict(NestedDict):
         self.T = T
 
     @staticmethod
-    def identity(ks):
-        return JacobianDict({k: {k: IdentityMatrix()} for k in ks}, ks, ks)
+    def identity(ks, name=None):
+        return JacobianDict({k: {k: IdentityMatrix()} for k in ks}, ks, ks, name=name)
 
     def addinputs(self):
         """Add any inputs that were not already in output list as outputs, with the identity"""
@@ -222,14 +224,14 @@ class JacobianDict(NestedDict):
         return J
 
     @staticmethod
-    def unpack(bigjac, outputs, inputs, T):
+    def unpack(bigjac, outputs, inputs, T, name=None):
         """If we have an (nO*T)*(nI*T) jacobian and provide names of nO outputs and nI inputs, output nested dictionary"""
         jacdict = {}
         for iO, O in enumerate(outputs):
             jacdict[O] = {}
             for iI, I in enumerate(inputs):
                 jacdict[O][I] = bigjac[(T * iO):(T * (iO + 1)), (T * iI):(T * (iI + 1))]
-        return JacobianDict(jacdict, outputs, inputs, T=T)
+        return JacobianDict(jacdict, outputs, inputs, name=name, T=T)
 
     def factored(self, T=None):
         return FactoredJacobianDict(self, T)
