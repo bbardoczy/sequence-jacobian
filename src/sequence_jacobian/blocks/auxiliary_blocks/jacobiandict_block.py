@@ -6,6 +6,14 @@ from ...classes import ImpulseDict, JacobianDict
 class JacobianDictBlock(JacobianDict, Block):
     """A wrapper for nested dicts/JacobianDicts passed directly into DAGs to ensure method compatibility"""
     def __init__(self, nesteddict, outputs=None, inputs=None, name=None):
+        # A block inside a DAG is addressed by name: it is the key of `kids`, of
+        # `descendants`, and of any `Js` supplied to reuse a Jacobian. Two
+        # anonymous blocks are therefore indistinguishable, so refuse to make one
+        # rather than let it collide later, somewhere less obviously connected.
+        if name is None and getattr(nesteddict, 'name', None) in (None, 'NestedDict'):
+            raise ValueError(
+                'JacobianDictBlock requires a name. Pass a named JacobianDict, or '
+                'wrap it yourself: JacobianDictBlock(J, name="household").')
         super().__init__(nesteddict, outputs=outputs, inputs=inputs, name=name)
         Block.__init__(self)
 

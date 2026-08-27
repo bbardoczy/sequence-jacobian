@@ -22,6 +22,11 @@ class Parent:
                         raise ValueError(f'Overlapping block name {k}')
                     descendants[k] = block.name
             else:
+                # Check non-Parent kids as well. Without this a duplicate is
+                # silently absorbed -- kids keeps whichever came last, and a Js
+                # entry keyed on the shared name is applied to both blocks.
+                if block.name in descendants:
+                    raise ValueError(f'Overlapping block name {block.name}')
                 descendants[block.name] = block.name
 
         # add yourself to descendants too! but you don't belong to any kid...

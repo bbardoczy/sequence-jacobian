@@ -70,3 +70,45 @@ def test_solve_jacobian_with_embedded_precomputed_jacobian(ss):
     G = outer.solve_jacobian(ss, ["u"], ["resid"], ["a"], T=3)
 
     assert "resid" in G.outputs
+
+
+@sj.simple
+def produces_x(a):
+    x = a
+    return x
+
+
+@sj.simple
+def produces_y(a):
+    y = a
+    return y
+
+
+def test_anonymous_jacobian_dict_block_is_refused(ss):
+    """Refuse to build a block that cannot be addressed by name."""
+    from sequence_jacobian.blocks.auxiliary_blocks.jacobiandict_block import (
+        JacobianDictBlock)
+
+    hh = sj.create_model([hh_inner], name="hh")
+    J = hh.jacobian(ss, ["a", "u"], ["m"], T=3)
+
+    # A named JacobianDict needs nothing further.
+    assert JacobianDictBlock(J).name == "hh"
+    assert JacobianDictBlock(J, name="override").name == "override"
+
+    # A raw dict has no name to inherit.
+    with pytest.raises(ValueError, match="requires a name"):
+        JacobianDictBlock({"m": {"a": J["m"]["a"]}})
+
+    # Nor does create_model, which wraps under the hood.
+    with pytest.raises(ValueError, match="requires a name"):
+        sj.create_model([{"m": {"a": J["m"]["a"]}}, clearing], name="outer")
+
+
+def test_duplicate_block_names_are_refused():
+    """Two blocks sharing a name used to be silently absorbed into one kid."""
+    first = produces_x.rename("dup")
+    second = produces_y.rename("dup")
+
+    with pytest.raises(ValueError, match="Overlapping block name dup"):
+        sj.create_model([first, second], name="outer")

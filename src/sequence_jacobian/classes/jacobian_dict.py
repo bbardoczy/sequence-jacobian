@@ -19,7 +19,10 @@ class NestedDict:
             self.nesteddict = nesteddict.nesteddict
             self.outputs: OrderedSet = nesteddict.outputs
             self.inputs: OrderedSet = nesteddict.inputs
-            self.name: str = nesteddict.name
+            # An explicit name wins over the wrapped dict's, so that rewrapping
+            # can rename; otherwise inherit, which is what makes a Jacobian keep
+            # the identity of the block that produced it.
+            self.name: str = nesteddict.name if name is None else name
         else:
             self.nesteddict = nesteddict
             if outputs is None:

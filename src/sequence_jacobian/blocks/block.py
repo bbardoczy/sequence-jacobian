@@ -257,10 +257,12 @@ class Block:
 
         if H_U_factored is None:
             H_U = self.jacobian(ss, unknowns, targets, T, Js, options, **kwargs).pack(T)
-            U_Z = JacobianDict.unpack(-np.linalg.solve(H_U, H_Z.pack(T)), unknowns, inputs, T,
-                                      name=f'{self.name}_U_Z')
+            U_Z = JacobianDict.unpack(-np.linalg.solve(H_U, H_Z.pack(T)), unknowns, inputs, T)
         else:
             U_Z = H_U_factored @ H_Z
+        # Named for both branches: U_Z is combined into a DAG just below, where an
+        # anonymous block would collide with any other anonymous one.
+        U_Z.name = f'{self.name}_U_Z'
 
         from sequence_jacobian import combine
         self_with_unknowns = combine([U_Z, self])
