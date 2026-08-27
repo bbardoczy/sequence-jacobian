@@ -97,12 +97,19 @@ class SimpleSparse:
 
         This is needed for Numba to take as input. Cache for efficiency.
         """
-        if self.indices is not None:
-            return self.indices, self.xs
-        else:
-            indices, xs = zip(*self.elements.items())
-            self.indices, self.xs = np.array(indices), np.array(xs)
-            return self.indices, self.xs
+        if self.indices is None:
+            if self.elements:
+                indices, xs = zip(*self.elements.items())
+                self.indices, self.xs = np.array(indices), np.array(xs)
+            else:
+                # An operator with no elements is legitimate rather than a bug:
+                # __add__ deletes elements that cancel, so any sum that cancels
+                # exactly lands here. Give back empty arrays of the same rank and
+                # dtype as the general case, so multiply_rs_matrix stays jittable
+                # on one signature; it then loops zero times and returns zeros.
+                self.indices = np.zeros((0, 2), dtype=int)
+                self.xs = np.zeros(0)
+        return self.indices, self.xs
 
     @property
     def T(self):
