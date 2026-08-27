@@ -135,7 +135,30 @@ class HetBlock(Block):
     def _impulse_linear(self, ss, inputs, outputs, Js, h=1E-4, twosided=False):
         return ImpulseDict(self._jacobian(ss, list(inputs.keys()), outputs, inputs.T, h=h, twosided=twosided).apply(inputs))
 
-    def _jacobian(self, ss, inputs, outputs, T, h=1E-4, twosided=False):
+    def fake_news_matrix(self, ss, inputs, outputs=None, T=None, **kwargs):
+        """Fake news matrices F[o][i] for this block, as nested dicts of arrays.
+
+        The intermediate the Jacobian is built from, exposed because it is of
+        interest in its own right. F[o][i][t, s] is the date-t response of o to
+        news at date 0 of a shock to i at date s, before those responses are
+        accumulated along diagonals into the Jacobian by J_from_F.
+
+        It is also the right starting point for the symbol of this block as a
+        quasi-Toeplitz operator: the kth Laurent coefficient is the sum of the
+        entries on the kth diagonal of F, so reading F directly is both cheaper
+        and more accurate than recovering partial sums from the edge of J.
+        """
+        own_options = self.get_options({}, kwargs, 'jacobian')
+        inputs = self.make_ordered_set(inputs)
+        outputs, _ = self.process_outputs(ss, {}, self.make_ordered_set(outputs))
+
+        F = self._fake_news(self.M.inv @ ss, self.M.inv @ inputs,
+                            self.M.inv @ outputs, T, **own_options)
+        return {self.M @ o: {self.M @ i: v for i, v in row.items()}
+                for o, row in F.items()}
+
+    def _fake_news(self, ss, inputs, outputs, T, h=1E-4, twosided=False):
+        """Steps 0-3 of the fake news algorithm, stopping before J_from_F."""
         ss = self.extract_ss_dict(ss)
         outputs = self.M_outputs.inv @ outputs
 
@@ -160,17 +183,23 @@ class HetBlock(Block):
         for o in outputs:
             curlyPs[o] = self.expectation_vectors(ss[o], T-1, law_of_motion)
 
-        # steps 3-4 of fake news algorithm
-        # make fake news matrix and Jacobian for each outcome-input pair
-        F, J = {}, {}
+        # step 3 of fake news algorithm
+        # make fake news matrix for each outcome-input pair
+        F = {}
         for o in outputs:
             for i in inputs:
                 if o.upper() not in F:
                     F[o.upper()] = {}
-                if o.upper() not in J:
-                    J[o.upper()] = {}
                 F[o.upper()][i] = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyPs[o])
-                J[o.upper()][i] = HetBlock.J_from_F(F[o.upper()][i])
+
+        return F
+
+    def _jacobian(self, ss, inputs, outputs, T, h=1E-4, twosided=False):
+        F = self._fake_news(ss, inputs, outputs, T, h=h, twosided=twosided)
+
+        # step 4 of fake news algorithm
+        J = {o: {i: HetBlock.J_from_F(Foi) for i, Foi in row.items()}
+             for o, row in F.items()}
 
         return JacobianDict(J, name=self.name, T=T)
 

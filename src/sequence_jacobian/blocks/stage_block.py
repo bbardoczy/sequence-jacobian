@@ -147,7 +147,19 @@ class StageBlock(Block):
     def _impulse_linear(self, ss, inputs, outputs, Js):
         return ImpulseDict(self._jacobian(ss, list(inputs.keys()), outputs, inputs.T).apply(inputs))
 
-    def _jacobian(self, ss, inputs, outputs, T):
+    def fake_news_matrix(self, ss, inputs, outputs=None, T=None, **kwargs):
+        """Fake news matrices F[o][i] for this block. See HetBlock.fake_news_matrix."""
+        own_options = self.get_options({}, kwargs, 'jacobian')
+        inputs = self.make_ordered_set(inputs)
+        outputs, _ = self.process_outputs(ss, {}, self.make_ordered_set(outputs))
+
+        F = self._fake_news(self.M.inv @ ss, self.M.inv @ inputs,
+                            self.M.inv @ outputs, T, **own_options)
+        return {self.M @ o: {self.M @ i: v for i, v in row.items()}
+                for o, row in F.items()}
+
+    def _fake_news(self, ss, inputs, outputs, T):
+        """Steps 0-3 of the fake news algorithm, stopping before J_from_F."""
         ss = self.extract_ss_dict(ss)
         outputs = self.M_outputs.inv @ outputs
         differentiable_hetinput = self.preliminary_hetinput(ss, h=1E-4)
@@ -157,23 +169,29 @@ class StageBlock(Block):
         curlyYs, curlyDs = {}, {}
         for i in inputs:
             curlyYs[i], curlyDs[i] = self.backward_fakenews(i, outputs, T, backward_data, forward_data, differentiable_hetinput)
-        
+
         # step 2
         curlyEs = {}
         for o in outputs:
             curlyEs[o] = self.expectation_vectors(o, T-1, expectations_data)
 
-        # steps 3-4
-        F, J = {}, {}
+        # step 3
+        F = {}
         for o in outputs:
             for i in inputs:
                 if o.upper() not in F:
                     F[o.upper()] = {}
-                if o.upper() not in J:
-                    J[o.upper()] = {}
                 F[o.upper()][i] = HetBlock.build_F(curlyYs[i][o], curlyDs[i], curlyEs[o])
-                J[o.upper()][i] = HetBlock.J_from_F(F[o.upper()][i])
-        
+
+        return F
+
+    def _jacobian(self, ss, inputs, outputs, T):
+        F = self._fake_news(ss, inputs, outputs, T)
+
+        # step 4
+        J = {o: {i: HetBlock.J_from_F(Foi) for i, Foi in row.items()}
+             for o, row in F.items()}
+
         return JacobianDict(J, name=self.name, T=T)
 
     '''Steady-state backward and forward methods'''
