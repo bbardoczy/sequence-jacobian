@@ -72,6 +72,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   type. This is the same defect Gregor Boehl fixed in `Displace.apply` for 1.1.0; the free
   function was missed. `vectorize_func_over_time` now takes and forwards keyword arguments
   too, and both are covered by tests.
+- `apply_function` also left `ss_initial` unset on the `Displace` it returned, alone among
+  the operations on that class. Lagging such a result reads `ss_initial` to fill the
+  pre-sample entries, so `apply_function(f, x)(-1)` returned `nan` there instead of
+  `f(ss_initial)` -- silently, since assigning `None` into a float array yields `nan`
+  rather than raising, and for every lag rather than only when `ss_initial` differs from
+  `ss`. It now mirrors `Displace.apply`.
 - `tests/utils/test_DAG.py::test_visited` asserted nothing: five bare comparisons whose
   results were discarded, so it had passed unconditionally since it was written. All five
   conditions hold, so `visit_from_outputs` and `visit_from_inputs` are newly covered rather

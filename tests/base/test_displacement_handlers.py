@@ -274,3 +274,22 @@ def test_apply_function_passes_kwargs():
 
     # the branch that always worked must agree with the one that did not
     assert np.allclose(apply_function(np.round, path, decimals=2), numeric_primitive(got))
+
+
+def test_apply_function_propagates_ss_initial():
+    """The result must carry ss_initial, which taking a lag reads.
+
+    apply_function left it None, so lagging its output filled the pre-sample
+    entries with nan instead of f(ss_initial). Silently, since assigning None
+    into a float array yields nan rather than raising -- and for any lag, not
+    only when ss_initial differs from ss.
+    """
+    path = np.array([1.5, 2.5, 3.5])
+    d = Displace(path, ss=1.5, ss_initial=0.5)      # deliberately ss_initial != ss
+
+    got = apply_function(np.sqrt, d)
+    expected = d.apply(np.sqrt)                     # the method has always been right
+
+    assert got.ss_initial == expected.ss_initial == np.sqrt(0.5)
+    assert np.allclose(numeric_primitive(got(-1)), numeric_primitive(expected(-1)))
+    assert not np.any(np.isnan(numeric_primitive(got(-1))))

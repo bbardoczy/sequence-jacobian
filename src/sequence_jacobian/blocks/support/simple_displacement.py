@@ -699,8 +699,11 @@ def apply_function(func, *args, **kwargs):
     properly instantiates the steady state value of the created Displace object"""
     if np.any([isinstance(x, Displace) for x in args]):
         x_path = vectorize_func_over_time(func, *args, **kwargs)
-        return Displace(x_path, ss=func(*[x.ss if isinstance(x, Displace) else numeric_primitive(x) for x in args],
-                                        **kwargs))
+        return Displace(x_path,
+                        ss=func(*[x.ss if isinstance(x, Displace) else numeric_primitive(x)
+                                  for x in args], **kwargs),
+                        ss_initial=func(*[x.ss_initial if isinstance(x, Displace) else numeric_primitive(x)
+                                          for x in args], **kwargs))
     elif np.any([isinstance(x, AccumulatedDerivative) for x in args]):
         raise NotImplementedError(
             "Have not yet implemented general apply_function functionality for AccumulatedDerivatives")
