@@ -3,7 +3,8 @@
 import numpy as np
 
 from sequence_jacobian.blocks.support.simple_displacement import (
-    IgnoreInt, IgnoreFloat, IgnoreVector, Displace, AccumulatedDerivative, numeric_primitive
+    IgnoreInt, IgnoreFloat, IgnoreVector, Displace, AccumulatedDerivative, numeric_primitive,
+    apply_function, vectorize_func_over_time
 )
 
 # Define useful helper functions for testing
@@ -244,3 +245,32 @@ def test_accumulated_derivative():
                     assert result == np.log(numeric_primitive(t2)) * numeric_primitive(t2) ** t1.f_value * get_fp_value(t1)\
                         if isinstance(t1, AccumulatedDerivative) else\
                         numeric_primitive(t1) * t2.f_value ** (numeric_primitive(t1) - 1) * get_fp_value(t2)
+
+def test_vectorize_func_over_time_passes_kwargs():
+    """Every date along the path is evaluated with the keyword arguments given."""
+    path = np.array([1.234567, 2.345678, 3.456789])
+    d = Displace(path, ss=path[0], ss_initial=path[0])
+
+    assert np.allclose(vectorize_func_over_time(np.round, d, decimals=2),
+                       np.round(path, decimals=2))
+
+
+def test_apply_function_passes_kwargs():
+    """Keyword arguments must reach func on every branch, not just the fallback.
+
+    apply_function forwarded **kwargs only where no argument was a Displace, so
+    the identical call rounded to two decimals on a plain array and to zero on a
+    Displace -- silently, since nothing about the signature suggests the keyword
+    is conditional on the argument type.
+    """
+    path = np.array([1.234567, 2.345678, 3.456789])
+    ss = 1.234567
+    d = Displace(path, ss=ss, ss_initial=ss)
+
+    got = apply_function(np.round, d, decimals=2)
+
+    assert np.allclose(numeric_primitive(got), np.round(path, decimals=2))
+    assert got.ss == np.round(ss, decimals=2)
+
+    # the branch that always worked must agree with the one that did not
+    assert np.allclose(apply_function(np.round, path, decimals=2), numeric_primitive(got))

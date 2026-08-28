@@ -676,8 +676,7 @@ def compute_l(i, m, j, n):
         return max(m, n + i)
 
 
-# TODO: This needs its own unit test
-def vectorize_func_over_time(func, *args):
+def vectorize_func_over_time(func, *args, **kwargs):
     """In `args` some arguments will be Displace objects and others will be Ignore/IgnoreVector objects.
     The Displace objects will have an extra time dimension (as its first dimension).
     We need to ensure that `func` is evaluated at the non-time dependent steady-state value of
@@ -690,7 +689,7 @@ def vectorize_func_over_time(func, *args):
     # np.shape(args[d_inds[0]])[0] is T, the size of the first dimension of the first Displace object
     # provided in args (assume all Displaces are the same shape s.t. they're conformable)
     for t in range(np.shape(args[d_inds[0]])[0]):
-        x_path.append(func(*[args[i][t] if i in d_inds else args[i] for i in range(len(args))]))
+        x_path.append(func(*[args[i][t] if i in d_inds else args[i] for i in range(len(args))], **kwargs))
 
     return np.array(x_path)
 
@@ -699,8 +698,9 @@ def apply_function(func, *args, **kwargs):
     """Ensure that for generic functions called within a block and acting on a Displace object
     properly instantiates the steady state value of the created Displace object"""
     if np.any([isinstance(x, Displace) for x in args]):
-        x_path = vectorize_func_over_time(func, *args)
-        return Displace(x_path, ss=func(*[x.ss if isinstance(x, Displace) else numeric_primitive(x) for x in args]))
+        x_path = vectorize_func_over_time(func, *args, **kwargs)
+        return Displace(x_path, ss=func(*[x.ss if isinstance(x, Displace) else numeric_primitive(x) for x in args],
+                                        **kwargs))
     elif np.any([isinstance(x, AccumulatedDerivative) for x in args]):
         raise NotImplementedError(
             "Have not yet implemented general apply_function functionality for AccumulatedDerivatives")

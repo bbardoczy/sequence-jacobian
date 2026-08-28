@@ -65,6 +65,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paid on debt nets against interest received on the same debt, for instance. This broke
   every product against a dense matrix, so it surfaced whenever such an operator met a
   heterogeneous-agent Jacobian during composition.
+- `apply_function` accepted `**kwargs` and silently discarded them whenever any argument
+  was a `Displace` -- the only case the function exists for. `np.round(x, decimals=2)`
+  applied through it returned values rounded to zero decimals instead, with no error, and
+  the same call on a plain array honoured the keyword, so results depended on the argument
+  type. This is the same defect Gregor Boehl fixed in `Displace.apply` for 1.1.0; the free
+  function was missed. `vectorize_func_over_time` now takes and forwards keyword arguments
+  too, and both are covered by tests.
 - `tests/utils/test_DAG.py::test_visited` asserted nothing: five bare comparisons whose
   results were discarded, so it had passed unconditionally since it was written. All five
   conditions hold, so `visit_from_outputs` and `visit_from_inputs` are newly covered rather
@@ -108,7 +115,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ss_initial` was not loaded correctly in `StageBlock.impulse_nonlinear`.
 - `curlyY` is now initialized to zero for outputs that are not shocked, making the
   Jacobian for het-outputs in `StageBlock` more robust.
-- A keyword argument was not passed on to all calls of `f` in `simple_displacement`.
+- A keyword argument was not passed on to all calls of `f` in `Displace.apply`. Fix
+  contributed by [Gregor Boehl](https://github.com/gboehl) (PR #8, upstream).
 
 [Unreleased]: https://github.com/bbardoczy/sequence-jacobian/compare/v1.1.0...HEAD
 [1.1.0]: https://github.com/bbardoczy/sequence-jacobian/compare/v1.0.0...v1.1.0
