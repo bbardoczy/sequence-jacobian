@@ -13,6 +13,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Determinacy checking**, implementing the winding number criterion of Auclert, Majic,
+  Rognlie and Straub (2025), *Determinacy and Large-Scale Solutions in the Sequence Space*.
+  `Block.winding_number(ss, unknowns, targets)` returns the winding number of `det j(z)`,
+  where `j` is the symbol of `H_U`: zero means the model generically has a unique bounded
+  solution, a negative number counts the dimensions of indeterminacy, and a positive number
+  the dimensions along which no solution exists. The result is an `int` subclass whose repr
+  spells out the verdict, and `return_path=True` additionally returns the sampled path for
+  plotting. Symbols are built block by block and composed along the DAG, never read off a
+  composed Jacobian, and `SolvedBlock`s are unwrapped so their unknowns join the model's.
+- `Block.check_existence(ss, unknowns, targets)`, which settles existence without using the
+  winding number, following section 3.5 of the same paper. A winding number of zero is only
+  generically sufficient, and the standing counterexample is not exotic -- the intertemporal
+  Keynesian cross in goods space, where the present-value budget constraint leaves the
+  operator a left null vector. Since non-genericity always produces nonexistence and
+  indeterminacy together, ruling out nonexistence rules out both.
+- `sequence_jacobian.determinacy`, holding the machinery behind those two methods. Nothing
+  from it is exported into the top-level namespace, since neither method needs an import.
+- `fake_news_matrix()` on `HetBlock` and `StageBlock`, where `F[o][i][t, s]` is the date-`t`
+  response of `o` to news at date 0 of a shock to `i` at date `s`. It was already computed
+  and then discarded inside `_jacobian`; exposing it duplicates no work and leaves the
+  Jacobian path unchanged.
+- `notebooks/determinacy.ipynb` (Tutorial 6), and a Jacobian timing benchmark under
+  `tests/performance/`.
+- A `[tool.ruff]` configuration. Ruff reads `requires-python` only from `pyproject.toml`,
+  and this package declares it in `setup.cfg`, so with no pinned `target-version` ruff
+  assumed a current interpreter and proposed 3.10-only annotation syntax that does not
+  parse on the 3.9 this package supports.
+
+### Changed
+
+- **`JacobianDictBlock` now requires a `name`.** A block inside a DAG is addressed by name --
+  it keys `kids`, `descendants`, and any `Js` supplied to reuse a Jacobian -- so two
+  anonymous blocks are indistinguishable. Constructing one without a name now raises, with
+  a message naming the fix from the caller's side.
+- **Duplicate block names are now rejected.** `Parent` previously deduplicated only among
+  `Parent` kids, so two same-named leaf blocks were absorbed silently: `kids` kept whichever
+  came last and the other was dropped from addressing, while both still evaluated.
+- Jacobians returned by `CombinedBlock` now carry the block's own name rather than falling
+  back to `"NestedDict"`, and that name survives slicing and merging. `JacobianDict.identity`
+  and `unpack` take an optional `name`. Anonymous Jacobians collided with each other, which
+  made `solve_jacobian` unusable on any model built around a precomputed combined-block
+  Jacobian, raising `Overlapping block name NestedDict`.
+
+### Fixed
+
+- `SimpleSparse.array()` raised `ValueError` on an operator with no elements, which is what
+  `__add__` leaves behind when terms cancel exactly -- a government budget where interest
+  paid on debt nets against interest received on the same debt, for instance. This broke
+  every product against a dense matrix, so it surfaced whenever such an operator met a
+  heterogeneous-agent Jacobian during composition.
+- `tests/utils/test_DAG.py::test_visited` asserted nothing: five bare comparisons whose
+  results were discarded, so it had passed unconditionally since it was written. All five
+  conditions hold, so `visit_from_outputs` and `visit_from_inputs` are newly covered rather
+  than newly correct.
+
 ## [1.1.0] - 2026-08-18
 
 ### Added
