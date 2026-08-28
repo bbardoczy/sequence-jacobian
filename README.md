@@ -22,9 +22,9 @@ Version numbers are independent of upstream and start from upstream `v1.0.0`;
   other states rather than only on the one it updates. `ExogenousMaker` accepts these
   alongside ordinary Markov matrices.
 - **Changes and fixes**. The ones most likely to matter:
-    - Keyword arguments given to `apply_function` reached the path but not the steady state
-      `(v1.1)`, so a SimpleBlock using them computed its steady state under different
-      arguments than its path. Wrong numbers, no error.
+    - Keyword arguments given to `Displace.apply` reached the time path but not the steady
+      state `(v1.1)`, so a SimpleBlock calling it with kwargs computed the two under
+      different arguments. Wrong numbers, no error.
     - `SimpleSparse.array()` raised `ValueError` whenever an operator's terms cancelled
       exactly `(v1.2)` -- a government budget where interest paid on debt nets against
       interest received on it, say. This broke every product against a dense matrix, so it
