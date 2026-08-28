@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 import sequence_jacobian as sj
-from sequence_jacobian.determinacy import unit_circle
 from sequence_jacobian.classes.steady_state_dict import SteadyStateDict
+from sequence_jacobian.determinacy import unit_circle
 
 
 @sj.simple
@@ -66,7 +66,6 @@ def test_symbol_matches_the_jacobian_diagonals(ss):
 
 def _corner_coefficients(J):
     """Appendix A.1: read the coefficients off the last column and row of J."""
-    T = J.shape[0]
     return np.concatenate((J[:, -1], J[-1, :-1][::-1]))
 
 
@@ -92,8 +91,7 @@ def test_laurent_from_fake_news_matches_the_jacobian_corner(krusell_smith_dag):
 
 
 def test_het_block_symbol(krusell_smith_dag):
-    from sequence_jacobian.determinacy import (evaluate_laurent,
-                                               laurent_from_fake_news)
+    from sequence_jacobian.determinacy import evaluate_laurent, laurent_from_fake_news
 
     _, ss, ks_model, _, _, _ = krusell_smith_dag
     hh = ks_model['hh']
@@ -219,8 +217,7 @@ def test_jacobian_dict_block_symbol_matches_the_het_block(krusell_smith_dag):
     each diagonal -- the same quantity HetBlock._symbol computes from F direct.
     Precomputing a Jacobian and embedding it therefore costs no accuracy.
     """
-    from sequence_jacobian.blocks.auxiliary_blocks.jacobiandict_block import (
-        JacobianDictBlock)
+    from sequence_jacobian.blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 
     _, ss, ks_model, _, _, _ = krusell_smith_dag
     hh = ks_model['hh']
@@ -238,11 +235,9 @@ def test_jacobian_dict_block_symbol_matches_the_het_block(krusell_smith_dag):
 
 def test_jacobian_dict_block_symbol_special_entries():
     """The identity, a SimpleSparse, and an absent entry each read correctly."""
-    from sequence_jacobian.blocks.auxiliary_blocks.jacobiandict_block import (
-        JacobianDictBlock)
+    from sequence_jacobian.blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
     from sequence_jacobian.classes.jacobian_dict import JacobianDict
-    from sequence_jacobian.classes.sparse_jacobians import (IdentityMatrix,
-                                                            SimpleSparse)
+    from sequence_jacobian.classes.sparse_jacobians import IdentityMatrix, SimpleSparse
 
     n = 64
     z = unit_circle(n)

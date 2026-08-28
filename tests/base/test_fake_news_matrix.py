@@ -1,7 +1,6 @@
 """Test the public fake_news_matrix on heterogeneous-agent blocks"""
 
 import numpy as np
-import pytest
 
 from sequence_jacobian.blocks.het_block import HetBlock
 

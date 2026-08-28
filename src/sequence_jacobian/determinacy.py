@@ -176,9 +176,9 @@ def winding_number_of_path(path, max_step=0.45 * np.pi):
             'the winding number may miss a turn and cannot be trusted. Either '
             'raise n_sample, or -- if it does not help -- det j(z) has a zero on '
             'the unit circle, which the criterion assumes it does not. '
-            + describe_near_zero(path))
+            + describe_near_zero(path), stacklevel=2)
 
-    return WindingNumber(int(round(np.sum(steps) / (2 * np.pi))))
+    return WindingNumber(round(np.sum(steps) / (2 * np.pi)))
 
 
 def describe_near_zero(path, n_sample=None):

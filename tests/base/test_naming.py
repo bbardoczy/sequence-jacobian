@@ -86,8 +86,7 @@ def produces_y(a):
 
 def test_anonymous_jacobian_dict_block_is_refused(ss):
     """Refuse to build a block that cannot be addressed by name."""
-    from sequence_jacobian.blocks.auxiliary_blocks.jacobiandict_block import (
-        JacobianDictBlock)
+    from sequence_jacobian.blocks.auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 
     hh = sj.create_model([hh_inner], name="hh")
     J = hh.jacobian(ss, ["a", "u"], ["m"], T=3)

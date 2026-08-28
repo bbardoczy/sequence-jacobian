@@ -7,3 +7,39 @@ requires = [
     "numba>=0.49",
 ]
 build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+# Package metadata lives in setup.cfg, which ruff does not read; without this it
+# assumes a current interpreter and proposes 3.10-only syntax (`X | Y`
+# annotations) that would break the 3.9 that setup.cfg advertises.
+target-version = "py39"
+# Descriptive, not aspirational: roughly where the existing code already sits.
+# E501 is deliberately not selected and `ruff format` is not run over the
+# package, so this bites only if someone formats a file on purpose.
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E4", "E7", "E9",   # pycodestyle: imports, statements, syntax
+    "F",                # pyflakes: undefined names, unused imports and locals
+    "I",                # import sorting
+    "B",                # likely bugs
+    "RUF",
+]
+ignore = [
+    # Checked site by site: the defaults are read-only, and the one that is
+    # written to (`Js` in Block.jacobian) is copied first. The single deliberate
+    # use, `residual_cache` in blocks/support/steady_state.py, says so in a
+    # comment right above it.
+    "B006",
+    # `I` for inputs, `O` for outputs, `l` for labor. Ambiguous in general,
+    # standard in this literature, and renaming them would cost more than it buys.
+    "E741",
+    # Prefers unpacking over `a + [b]`. A matter of taste, and the concatenation
+    # reads better where this codebase uses it.
+    "RUF005",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Re-exporting is the entire purpose of this module.
+"src/sequence_jacobian/__init__.py" = ["F401"]
