@@ -164,3 +164,55 @@ def test_near_zero_reports_a_cycle():
 
     with pytest.warns(UserWarning, match="oscillating with period"):
         model.winding_number(ss, ['u'], ['resid'], T=20, n_sample=16384)
+
+
+def test_check_existence_on_a_healthy_model(krusell_smith_dag):
+    """A model with a genuine solution does not grow with the horizon."""
+    _, ss, model, unknowns, targets, _ = krusell_smith_dag
+
+    growth = model.check_existence(ss, unknowns, targets, T=60, T_compare=120,
+                                   n_draws=10)
+    assert growth < 2.0
+
+
+def test_check_existence_detects_a_singular_system():
+    """The lag operator is the textbook nonexistence case.
+
+    L maps (x0, x1, ...) to (0, x0, ...): injective, but nothing with a non-zero
+    first entry is in its range, so Lx = y usually has no solution. Truncated, it
+    is outright singular rather than merely ill-behaved.
+    """
+    @sj.simple
+    def lagged(u):
+        resid = u(-1)
+        return resid
+
+    ss = SteadyStateDict({'u': 1.0, 'resid': 1.0})
+    model = sj.create_model([lagged], name='lag')
+
+    assert model.winding_number(ss, ['u'], ['resid'], T=20, n_sample=256) == 1
+
+    with pytest.warns(UserWarning, match="exactly singular"):
+        assert model.check_existence(ss, ['u'], ['resid'], T=20, T_compare=40,
+                                     n_draws=5) == np.inf
+
+
+def test_check_existence_needs_a_rebuildable_model():
+    """A precomputed Jacobian has a fixed T, so the probe cannot vary it."""
+    from sequence_jacobian.classes.jacobian_dict import JacobianDict
+
+    T = 30
+    J = JacobianDict({'C': {'Y': np.tril(np.ones((T, T))) * 0.1}},
+                     name='mpcs', T=T)
+
+    @sj.simple
+    def goods(Y, C):
+        goods_mkt = Y - C
+        return goods_mkt
+
+    model = sj.create_model([J, goods], name='fixedT')
+    ss = SteadyStateDict({'Y': 1.0, 'C': 1.0, 'goods_mkt': 0.0})
+
+    with pytest.raises(ValueError, match="Cannot rebuild this model"):
+        model.check_existence(ss, ['Y'], ['goods_mkt'], T=10, T_compare=20,
+                              n_draws=3)

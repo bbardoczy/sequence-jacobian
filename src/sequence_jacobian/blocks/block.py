@@ -370,6 +370,97 @@ class Block:
         wind = winding_number_of_path(path)
         return (wind, path) if return_path else wind
 
+    def check_existence(self, ss: SteadyStateDict, unknowns: List[str],
+                        targets: List[str], T: Optional[int] = None,
+                        T_compare: Optional[int] = None, n_draws: int = 100,
+                        decay: Tuple[float, float] = (0.85, 0.95),
+                        seed: Optional[int] = 0, growth_tol: float = 10.0):
+        """Probe whether H_U x = y actually has solutions, for the false positives.
+
+        A winding number of zero is only *generically* sufficient. The known
+        economic counterexample is the intertemporal Keynesian cross in goods
+        space, where the present-value budget constraint leaves the operator a
+        left null vector, so its range holds only sequences with zero net
+        present value -- not invertible, yet winding number zero. Since
+        non-genericity always produces nonexistence and indeterminacy together,
+        ruling out nonexistence rules out both.
+
+        The probe is from Auclert, Majic, Rognlie and Straub (2025), section 3.5.
+        Feed in random decaying sequences and solve the truncated system. If no
+        true solution exists, the truncated solve returns something enormous
+        relative to what went in, and -- the actual signature -- it gets worse
+        as T grows, because nothing about it is converging. A genuine solution
+        barely moves.
+
+        Returns the growth factor: how much the solution magnitude grows when T
+        goes from T to T_compare. Around 1 means existence looks fine. Orders of
+        magnitude means it does not; the paper's example goes from roughly 2e3 to
+        1e9 on doubling.
+
+        Costs a dense solve of size (unknowns x T_compare) squared, so doubling T
+        on a large model is expensive; set T_compare yourself to control it.
+
+        The model has to be buildable at both horizons. A precomputed Jacobian
+        embedded in the DAG carries its own fixed T and cannot be rebuilt at
+        another, so this raises rather than comparing two different models.
+        """
+        from .combined_block import combine
+
+        blocks, extra_unknowns, extra_targets = self._promote_solved()
+        unknowns = self.make_ordered_set(list(unknowns) + extra_unknowns)
+        targets = self.make_ordered_set(list(targets) + extra_targets)
+        flat = combine(blocks, name=f'{self.name}_promoted')
+
+        if T_compare is None:
+            T_compare = 2 * T
+
+        rng = np.random.default_rng(seed)
+        n = len(unknowns)
+        lo, hi = decay
+        eps = rng.uniform(lo, hi, size=(2, n, n_draws))
+
+        def magnitude(horizon):
+            t = np.arange(horizon)[:, None, None]
+            # one decaying sequence per target per draw, stacked into y
+            y = (eps[0] ** t - 0.5 * eps[1] ** t)         # (horizon, n, n_draws)
+            y = y.transpose(1, 0, 2).reshape(n * horizon, n_draws)
+
+            try:
+                H_U = flat.jacobian(ss, unknowns, targets, T=horizon).pack(horizon)
+            except ValueError as e:
+                raise ValueError(
+                    f'Cannot rebuild this model at T={horizon}, which the probe '
+                    'needs in order to watch how the solution scales with the '
+                    'horizon. A precomputed Jacobian embedded in the DAG has its '
+                    'own fixed T, so pass T and T_compare that match it, or build '
+                    'the model from blocks that can be evaluated at any horizon.'
+                ) from e
+            try:
+                x = np.linalg.solve(H_U, y)
+            except np.linalg.LinAlgError:
+                # Exactly singular rather than merely blowing up. The lag
+                # operator does this: its truncation has an empty first row.
+                return np.inf
+            return np.max(np.abs(x)) / np.max(np.abs(y))
+
+        small, large = magnitude(T), magnitude(T_compare)
+        if not np.isfinite(small) or not np.isfinite(large):
+            warnings.warn(
+                'The truncated system is exactly singular, so H_U x = y has no '
+                'solution for generic y.')
+            return np.inf
+        growth = large / small
+
+        if growth > growth_tol:
+            warnings.warn(
+                f'The truncated solution grows by a factor of {growth:.1e} when T '
+                f'goes from {T} to {T_compare}, reaching {large:.1e} times the '
+                'size of what was fed in. That is the signature of no bounded '
+                'solution existing, so a winding number of zero here would be a '
+                'false positive -- see check_existence.')
+
+        return growth
+
     def solved(self, unknowns, targets, name=None, solver=None, solver_kwargs=None):
         if name is None:
             name = self.name + "_solved"
