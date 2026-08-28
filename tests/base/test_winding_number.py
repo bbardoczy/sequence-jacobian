@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 import sequence_jacobian as sj
+from sequence_jacobian.blocks.block import Block
 from sequence_jacobian.classes.steady_state_dict import SteadyStateDict
 from sequence_jacobian.determinacy import WindingNumber
 
@@ -208,3 +209,24 @@ def test_a_model_near_a_boundary_does_not_warn(one_asset_hank_dag):
         warnings.simplefilter('error')          # any warning fails the test
         assert model.winding_number(ss, unknowns, targets, T=200,
                                     n_sample=2048) == 0
+
+
+def test_the_public_surface_is_the_two_block_methods():
+    """Determinacy is reached through blocks, not through the top namespace.
+
+    ``sj.determinacy`` holds the machinery and stays importable, but nothing from
+    it belongs in ``sj.*``: users call ``model.winding_number(...)`` and
+    ``model.check_existence(...)`` and never construct these objects themselves.
+    Pinned because ``sj.determinacy`` would otherwise resolve only as a side
+    effect of ``block.py`` importing from it.
+    """
+    assert sj.determinacy.__name__ == 'sequence_jacobian.determinacy'
+
+    for method in ('winding_number', 'check_existence'):
+        assert callable(getattr(Block, method))
+
+    # nothing leaked upward, where it would sit confusingly close to the methods
+    for name in ('winding_number', 'WindingNumber', 'winding_number_of_path',
+                 'unit_circle', 'evaluate_laurent', 'laurent_from_matrix',
+                 'laurent_from_fake_news', 'describe_near_zero'):
+        assert not hasattr(sj, name), f'sj.{name} should not be public'
