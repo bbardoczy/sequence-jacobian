@@ -148,14 +148,20 @@ class WindingNumber(int):
         return f"{int(self)}  ({reading})"
 
 
-def winding_number_of_path(path, max_step=np.pi / 2):
+def winding_number_of_path(path, max_step=0.45 * np.pi):
     """Times a closed path in the complex plane encircles the origin.
 
     Accumulates the change in argument and divides by 2*pi. That is exact if the
     path is sampled finely enough for the argument to move by less than pi
-    between neighbours; past that, turns are invisible and the count is wrong
-    rather than merely imprecise. Warns above ``max_step`` radians, which leaves
-    a margin before the failure.
+    between neighbours; past that a turn is invisible and the count is wrong
+    rather than merely imprecise.
+
+    The default threshold sits just under pi/2 because a root within sampling
+    distance of the circle turns the argument by about pi in total, and that
+    turn arrives either as one step of nearly pi, when the root falls between
+    samples, or as two of about pi/2, when it falls on one. Both have to trip.
+    Models classified correctly leave room: the widest step seen across the
+    shipped examples, including at the Taylor boundary itself, is 0.61 radians.
     """
     path = np.asarray(path)
     closed = np.append(path, path[0])
@@ -166,8 +172,11 @@ def winding_number_of_path(path, max_step=np.pi / 2):
     biggest = np.max(np.abs(steps))
     if biggest > max_step:
         warnings.warn(
-            f'The symbol turns by up to {biggest:.2f} radians between samples, '
-            f'so the winding number may miss a turn. Raise n_sample.')
+            f'The symbol turns by up to {biggest:.2f} radians between samples, so '
+            'the winding number may miss a turn and cannot be trusted. Either '
+            'raise n_sample, or -- if it does not help -- det j(z) has a zero on '
+            'the unit circle, which the criterion assumes it does not. '
+            + describe_near_zero(path))
 
     return WindingNumber(int(round(np.sum(steps) / (2 * np.pi))))
 

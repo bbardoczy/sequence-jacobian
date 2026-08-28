@@ -14,7 +14,7 @@ from ..utilities.function import input_defaults
 from ..utilities.bijection import Bijection
 from ..utilities.ordered_set import OrderedSet
 from ..classes import SteadyStateDict, UserProvidedSS, ImpulseDict, JacobianDict, FactoredJacobianDict
-from ..determinacy import describe_near_zero, winding_number_of_path
+from ..determinacy import winding_number_of_path
 
 Array = Any
 
@@ -303,8 +303,7 @@ class Block:
 
     def winding_number(self, ss: SteadyStateDict, unknowns: List[str],
                        targets: List[str], T: Optional[int] = None,
-                       n_sample: int = 8192, near_zero: Optional[float] = None,
-                       return_path: bool = False):
+                       n_sample: int = 8192, return_path: bool = False):
         """Whether this model has a unique bounded solution, by winding number.
 
         Returns a WindingNumber -- an int that explains its own reading; see
@@ -313,26 +312,21 @@ class Block:
         around the unit circle, which is worth plotting: how close it passes to
         the origin says how much to trust the count.
 
-        The criterion assumes det j(z) has no zero on the unit circle. That
-        cannot be verified numerically, only probed, so this warns when the path
-        comes within ``near_zero`` of the origin relative to its own scale.
-
-        near_zero defaults to 10 / n_sample, and has to scale that way. Near a
-        simple root the determinant grows about linearly in the distance along
-        the circle, so sampling at K points sees a genuine on-circle root only
-        as a dip of order 1/K -- around 1e-4 at the default. A fixed small
-        tolerance would therefore never fire on exactly the case the check
-        exists for, while healthy models sit three orders of magnitude clear:
-        the shipped Krusell-Smith and HANK models stay above 0.1.
+        The criterion assumes det j(z) has no zero on the unit circle. What
+        that costs, when violated, is the count itself: the argument jumps by pi
+        as the path passes through the origin, and no sampling resolves it. So
+        the guard is on how far the argument turns between neighbouring samples,
+        not on how close the path comes to the origin. The latter turns out not
+        to discriminate -- correctly classified models routinely pass within
+        1e-3 of the origin relative to their own scale, no further away than
+        genuinely broken ones -- whereas the angular step separates the two
+        cleanly. Use return_path if you want to judge proximity yourself.
 
         Solved blocks are unwrapped and their unknowns promoted automatically;
         the count is unaffected, since a solved block's own symbol contributes no
         winding of its own.
         """
         from .combined_block import combine
-
-        if near_zero is None:
-            near_zero = 10 / n_sample
 
         blocks, extra_unknowns, extra_targets = self._promote_solved()
         unknowns = self.make_ordered_set(list(unknowns) + extra_unknowns)
@@ -353,19 +347,11 @@ class Block:
 
         path = np.linalg.det(H_U)
 
-        modulus = np.abs(path)
-        if modulus.max() == 0.0:
+        if np.abs(path).max() == 0.0:
             raise ValueError(
                 'det j(z) vanishes identically, so H_U is singular at every z '
                 'and has no winding number. Usually a target that does not '
                 'depend on any unknown, or two unknowns entering identically.')
-        if modulus.min() <= near_zero * modulus.max():
-            warnings.warn(
-                f'det j(z) comes within {modulus.min() / modulus.max():.1e} of '
-                'the origin relative to its largest value, so the winding number '
-                'is not a reliable verdict: the criterion assumes no zero on the '
-                'unit circle, and this model is close to having one. '
-                + describe_near_zero(path))
 
         wind = winding_number_of_path(path)
         return (wind, path) if return_path else wind
