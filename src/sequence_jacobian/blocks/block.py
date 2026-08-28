@@ -1,5 +1,7 @@
 """Primitives to provide clarity and structure on blocks/models work"""
 
+import warnings
+
 import numpy as np
 from numbers import Real
 from typing import Any, Dict, Union, Tuple, Optional, List
@@ -12,6 +14,7 @@ from ..utilities.function import input_defaults
 from ..utilities.bijection import Bijection
 from ..utilities.ordered_set import OrderedSet
 from ..classes import SteadyStateDict, UserProvidedSS, ImpulseDict, JacobianDict, FactoredJacobianDict
+from ..determinacy import winding_number_of_path
 
 Array = Any
 
@@ -267,6 +270,93 @@ class Block:
         from sequence_jacobian import combine
         self_with_unknowns = combine([U_Z, self])
         return self_with_unknowns.jacobian(ss, inputs, unknowns_as_outputs | actual_outputs, T, Js, options, **kwargs)
+
+    def _promote_solved(self):
+        """Primitive blocks, with solved unknowns and targets lifted out.
+
+        A solved block solves internally, which is an operator inverse the
+        symbol cannot see through, and imposes its own boundary condition --
+        precisely what could hide an indeterminacy. Unwrapping it and promoting
+        its unknowns to the model's describes the same equilibrium, as the same
+        equations solved jointly rather than nested.
+
+        Returns the blocks, and the unknowns and targets to append.
+        """
+        from .solved_block import SolvedBlock
+        from .combined_block import CombinedBlock
+
+        blocks, unknowns, targets = [], [], []
+
+        def walk(block):
+            if isinstance(block, SolvedBlock):
+                unknowns.extend(block.unknowns)
+                targets.extend(block.targets)
+                walk(block.block)
+            elif isinstance(block, CombinedBlock):
+                for kid in block.blocks:
+                    walk(kid)
+            else:
+                blocks.append(block)
+
+        walk(self)
+        return blocks, unknowns, targets
+
+    def winding_number(self, ss: SteadyStateDict, unknowns: List[str],
+                       targets: List[str], T: Optional[int] = None,
+                       n_sample: int = 8192, near_zero: float = 1e-8,
+                       return_path: bool = False):
+        """Whether this model has a unique bounded solution, by winding number.
+
+        Returns a WindingNumber -- an int that explains its own reading; see
+        that class for what the value means and for the one way zero can
+        mislead. With return_path, also returns det j(z) sampled counterclockwise
+        around the unit circle, which is worth plotting: how close it passes to
+        the origin says how much to trust the count.
+
+        The criterion assumes det j(z) has no zero on the unit circle. That
+        cannot be verified numerically, only probed, so this warns when the path
+        comes within ``near_zero`` of the origin relative to its own scale.
+
+        Solved blocks are unwrapped and their unknowns promoted automatically;
+        the count is unaffected, since a solved block's own symbol contributes no
+        winding of its own.
+        """
+        from .combined_block import combine
+
+        blocks, extra_unknowns, extra_targets = self._promote_solved()
+        unknowns = self.make_ordered_set(list(unknowns) + extra_unknowns)
+        targets = self.make_ordered_set(list(targets) + extra_targets)
+
+        if len(unknowns) != len(targets):
+            raise ValueError(f'H_U is not square: {len(unknowns)} unknowns '
+                             f'{list(unknowns)} against {len(targets)} targets '
+                             f'{list(targets)}')
+
+        flat = combine(blocks, name=f'{self.name}_promoted')
+        symbols = flat._symbol(ss, unknowns, targets, T, n_sample)
+
+        H_U = np.empty((n_sample, len(targets), len(unknowns)), dtype=complex)
+        for a, o in enumerate(targets):
+            for b, i in enumerate(unknowns):
+                H_U[:, a, b] = symbols[o][i]
+
+        path = np.linalg.det(H_U)
+
+        modulus = np.abs(path)
+        if modulus.max() == 0.0:
+            raise ValueError(
+                'det j(z) vanishes identically, so H_U is singular at every z '
+                'and has no winding number. Usually a target that does not '
+                'depend on any unknown, or two unknowns entering identically.')
+        if modulus.min() <= near_zero * modulus.max():
+            warnings.warn(
+                f'det j(z) comes within {modulus.min() / modulus.max():.1e} of '
+                'the origin relative to its largest value, so the winding number '
+                'is not a reliable verdict: the criterion assumes no zero on the '
+                'unit circle, and this model is close to having one.')
+
+        wind = winding_number_of_path(path)
+        return (wind, path) if return_path else wind
 
     def solved(self, unknowns, targets, name=None, solver=None, solver_kwargs=None):
         if name is None:

@@ -57,6 +57,21 @@ class SolvedBlock(Block, Parent):
     def __repr__(self):
         return f"<SolvedBlock '{self.name}'>"
 
+    def _symbol(self, ss, inputs, outputs, T, n_sample):
+        """Deliberately unavailable: a solved block must be promoted first.
+
+        Solving internally inverts an operator, and the winding number criterion
+        cannot see through an inverse -- it also imposes this block's own
+        boundary condition, which is exactly what could hide an indeterminacy.
+        Block.winding_number therefore unwraps solved blocks and lifts their
+        unknowns and targets into the model's before composing any symbols.
+        """
+        raise NotImplementedError(
+            f"SolvedBlock '{self.name}' has no symbol: its unknowns "
+            f"{list(self.unknowns)} must be promoted to the model's before the "
+            "winding number is taken. Block.winding_number does this itself, so "
+            "this means _symbol was reached some other way.")
+
     def _steady_state(self, calibration, dissolve, options, **kwargs):
         if self.name in dissolve:
             kwargs['solver'] = "solved"

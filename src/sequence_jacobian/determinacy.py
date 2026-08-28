@@ -17,6 +17,7 @@ Jacobian, where spurious missing anticipation contaminates precisely the corner
 the coefficients would come from.
 """
 
+import warnings
 from functools import lru_cache
 
 import numpy as np
@@ -103,3 +104,69 @@ def laurent_from_matrix(J):
     Jacobians and reading this.
     """
     return np.concatenate((J[:, -1], J[-1, :-1][::-1]))
+
+
+class WindingNumber(int):
+    """The winding number of det j(z), which reads as a verdict on H_U.
+
+    An ordinary int -- it compares, indexes and serialises like one -- that
+    explains itself when echoed. The reading, from propositions 9 and 11 of
+    Auclert, Majic, Rognlie and Straub (2025):
+
+        0   a unique bounded solution
+        < 0 indeterminacy of dimension -w: bounded solutions form a family of
+            that dimension, and one always exists
+        > 0 nonexistence of dimension w: for generic shocks no bounded solution
+            exists at all, though any that does exist is unique
+
+    Take the null hypothesis to be that the model has a unique bounded solution.
+    A non-zero winding number rejects it decisively. Zero fails to reject, but
+    is only *generically* sufficient, so it can be a false positive: there are
+    non-generic operators with winding number zero that are not invertible.
+
+    That case is not exotic. The intertemporal Keynesian cross in goods space,
+    I - M, is one: the household present-value budget constraint forces
+    q'(I - M) = 0 for q = (1, (1+r)^-1, ...), so its range holds only sequences
+    with zero net present value and it is not invertible -- yet its winding
+    number is 0. Economic structure imposes exact restrictions that a randomly
+    perturbed operator would never satisfy, so genericity in the space of
+    operators does not transfer to the space of models. Suspect adding-up
+    constraints and conservation laws, and use ``check_existence`` to rule the
+    case out, since non-genericity always produces indeterminacy and
+    nonexistence together.
+    """
+
+    def __repr__(self):
+        if self == 0:
+            reading = "unique bounded solution"
+        elif self < 0:
+            reading = (f"indeterminate: bounded solutions form a "
+                       f"{-int(self)}-dimensional family")
+        else:
+            reading = (f"no bounded solution for generic shocks "
+                       f"(nonexistence of dimension {int(self)})")
+        return f"{int(self)}  ({reading})"
+
+
+def winding_number_of_path(path, max_step=np.pi / 2):
+    """Times a closed path in the complex plane encircles the origin.
+
+    Accumulates the change in argument and divides by 2*pi. That is exact if the
+    path is sampled finely enough for the argument to move by less than pi
+    between neighbours; past that, turns are invisible and the count is wrong
+    rather than merely imprecise. Warns above ``max_step`` radians, which leaves
+    a margin before the failure.
+    """
+    path = np.asarray(path)
+    closed = np.append(path, path[0])
+
+    steps = np.diff(np.angle(closed))
+    steps = (steps + np.pi) % (2 * np.pi) - np.pi          # to (-pi, pi]
+
+    biggest = np.max(np.abs(steps))
+    if biggest > max_step:
+        warnings.warn(
+            f'The symbol turns by up to {biggest:.2f} radians between samples, '
+            f'so the winding number may miss a turn. Raise n_sample.')
+
+    return WindingNumber(int(round(np.sum(steps) / (2 * np.pi))))
