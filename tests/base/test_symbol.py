@@ -209,3 +209,49 @@ def test_combined_symbol_with_het_block(krusell_smith_dag):
     assert S["asset_mkt"]["K"].shape == (128,)
     assert np.isfinite(S["asset_mkt"]["K"]).all()
     assert not np.allclose(S["asset_mkt"]["K"], 0.0)
+
+
+def test_jacobian_dict_block_symbol_matches_the_het_block(krusell_smith_dag):
+    """Corner extraction reproduces the het block's own symbol exactly.
+
+    This is the case the docstring calls safe. A fake news Jacobian accumulates
+    F along its diagonals, so its last row and column hold the complete sum over
+    each diagonal -- the same quantity HetBlock._symbol computes from F direct.
+    Precomputing a Jacobian and embedding it therefore costs no accuracy.
+    """
+    from sequence_jacobian.blocks.auxiliary_blocks.jacobiandict_block import (
+        JacobianDictBlock)
+
+    _, ss, ks_model, _, _, _ = krusell_smith_dag
+    hh = ks_model['hh']
+
+    T, n = 20, 128
+    direct = hh._symbol(ss, ['r', 'w'], ['A', 'C'], T=T, n_sample=n)
+
+    J = hh.jacobian(ss, ['r', 'w'], ['A', 'C'], T=T)
+    wrapped = JacobianDictBlock(J)._symbol(ss, ['r', 'w'], ['A', 'C'], T=T, n_sample=n)
+
+    for o in ('A', 'C'):
+        for i in ('r', 'w'):
+            assert np.allclose(direct[o][i], wrapped[o][i]), (o, i)
+
+
+def test_jacobian_dict_block_symbol_special_entries():
+    """The identity, a SimpleSparse, and an absent entry each read correctly."""
+    from sequence_jacobian.blocks.auxiliary_blocks.jacobiandict_block import (
+        JacobianDictBlock)
+    from sequence_jacobian.classes.jacobian_dict import JacobianDict
+    from sequence_jacobian.classes.sparse_jacobians import (IdentityMatrix,
+                                                            SimpleSparse)
+
+    n = 64
+    z = unit_circle(n)
+    J = JacobianDict({'a': {'u': IdentityMatrix()},
+                      'b': {'u': SimpleSparse({(-1, 0): 3.0})}},
+                     name='stored', T=8)
+
+    S = JacobianDictBlock(J)._symbol(None, ['u', 'v'], ['a', 'b'], T=8, n_sample=n)
+
+    assert np.allclose(S['a']['u'], 1.0)      # identity
+    assert np.allclose(S['b']['u'], 3.0 * z)  # one lag, coefficient 3
+    assert np.allclose(S['a']['v'], 0.0)      # absent entry is a genuine zero
