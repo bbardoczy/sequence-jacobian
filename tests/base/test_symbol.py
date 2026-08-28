@@ -146,3 +146,66 @@ def test_unit_circle_is_shared_and_read_only():
     with pytest.raises(ValueError):
         z += 1                                  # in-place arithmetic refused
     assert unit_circle.cache_parameters()['maxsize'] is not None
+
+
+@sj.simple
+def stage_a(x, u):
+    m = 0.5 * x(-1) + u
+    return m
+
+
+@sj.simple
+def stage_b(m, u):
+    y = m(+1) - 2 * u(-2)
+    resid = y - m
+    return y, resid
+
+
+def test_combined_symbol_matches_composed_jacobian():
+    """Composing symbols equals the symbol of the composed Jacobian.
+
+    Only checkable exactly on a DAG of simple blocks, where products and sums of
+    SimpleSparse stay SimpleSparse, so the composed Jacobian is still banded and
+    its symbol is exact. That is proposition 1: the Toeplitz parts multiply, and
+    the (i, m) terms with m > 0 are the compact correction the symbol ignores.
+    """
+    dag = sj.create_model([stage_a, stage_b], name="chain")
+    ss = SteadyStateDict({"x": 1.0, "u": 1.0, "m": 1.5, "y": -0.5, "resid": -2.0})
+
+    T, n = 30, 256
+    z = unit_circle(n)
+
+    composed = dag._symbol(ss, ["x", "u"], ["y", "resid"], T=T, n_sample=n)
+
+    J = dag.jacobian(ss, ["x", "u"], ["y", "resid"], T=T)
+    for o in ("y", "resid"):
+        for i in ("x", "u"):
+            direct = np.zeros(n, dtype=complex)
+            for (diag, _m), coef in J[o][i].elements.items():
+                direct = direct + coef * z ** (-diag)
+            assert np.allclose(composed[o][i], direct), (o, i)
+
+
+def test_combined_symbol_records_unmoving_outputs():
+    """An output that ignores the inputs must come back as an explicit zero."""
+    @sj.simple
+    def constant(u):
+        c = u.ss
+        return c
+
+    dag = sj.create_model([constant, stage_a], name="withconst")
+    ss = SteadyStateDict({"x": 1.0, "u": 1.0, "c": 1.0, "m": 1.5})
+
+    S = dag._symbol(ss, ["x"], ["c", "m"], T=10, n_sample=64)
+    assert np.allclose(S["c"]["x"], 0.0)
+    assert not np.allclose(S["m"]["x"], 0.0)
+
+
+def test_combined_symbol_with_het_block(krusell_smith_dag):
+    """A DAG containing a het block composes to finite symbols."""
+    _, ss, ks_model, _, _, _ = krusell_smith_dag
+
+    S = ks_model._symbol(ss, ["K", "Z"], ["asset_mkt"], T=20, n_sample=128)
+    assert S["asset_mkt"]["K"].shape == (128,)
+    assert np.isfinite(S["asset_mkt"]["K"]).all()
+    assert not np.allclose(S["asset_mkt"]["K"], 0.0)

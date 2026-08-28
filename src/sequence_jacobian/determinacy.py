@@ -87,3 +87,19 @@ def evaluate_laurent(coefficients, n_sample):
     padded = np.zeros(n_sample, dtype=complex)
     padded[powers % n_sample] = coefficients
     return np.fft.ifft(padded) * n_sample
+
+
+def laurent_from_matrix(J):
+    """Laurent coefficients read off the last column and row of a Jacobian.
+
+    Appendix A.1. Entry m of the result is the coefficient on z**(m - (T-1)),
+    taken as J[T-1+k, T-1] for k <= 0 and J[T-1, T-1-k] for k >= 0.
+
+    Only valid where the corner is representative. That holds for a block that
+    is exactly banded, and for a heterogeneous-agent Jacobian built by the fake
+    news algorithm, which carries no truncation artifacts. It does NOT hold for
+    a composed Jacobian: spurious missing anticipation contaminates exactly the
+    corner these coefficients come from. Compose symbols instead of composing
+    Jacobians and reading this.
+    """
+    return np.concatenate((J[:, -1], J[-1, :-1][::-1]))

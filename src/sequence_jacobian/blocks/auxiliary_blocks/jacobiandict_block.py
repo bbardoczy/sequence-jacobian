@@ -1,7 +1,12 @@
 """A simple wrapper for JacobianDicts to be embedded in DAGs"""
 
+import numpy as np
+
 from ..block import Block
 from ...classes import ImpulseDict, JacobianDict
+from ...classes.sparse_jacobians import IdentityMatrix, SimpleSparse
+from ...determinacy import (evaluate_laurent, laurent_from_matrix,
+                            unit_circle)
 
 class JacobianDictBlock(JacobianDict, Block):
     """A wrapper for nested dicts/JacobianDicts passed directly into DAGs to ensure method compatibility"""
@@ -29,3 +34,37 @@ class JacobianDictBlock(JacobianDict, Block):
         if not outputs <= self.outputs:
             raise KeyError(f'Asking JacobianDictBlock for {outputs - self.outputs}, which are among its outputs {self.outputs}')
         return self[outputs, inputs]
+
+    def _symbol(self, ss, inputs, outputs, T, n_sample):
+        """Symbol of the stored Jacobian, evaluated on the roots of unity.
+
+        Coefficients come off the corner of each matrix, which is sound only if
+        that corner is representative -- see determinacy.laurent_from_matrix.
+        A Jacobian handed to this block carries no record of where it came from,
+        so this cannot be checked here.
+
+        In practice: safe for a Jacobian written by the fake news algorithm,
+        which is the usual reason to precompute one. Not safe for a Jacobian
+        that is itself a composition, where truncation artifacts sit exactly
+        where the coefficients are read.
+        """
+        symbols = {}
+        for o in outputs:
+            row = {}
+            for i in inputs:
+                x = self[o].get(i) if o in self.outputs else None
+                if x is None:
+                    row[i] = np.zeros(n_sample, dtype=complex)
+                elif isinstance(x, IdentityMatrix):
+                    row[i] = np.ones(n_sample, dtype=complex)
+                elif isinstance(x, SimpleSparse):
+                    z = unit_circle(n_sample)
+                    acc = np.zeros(n_sample, dtype=complex)
+                    for (diag, _missing), coef in x.elements.items():
+                        acc = acc + coef * z ** (-diag)
+                    row[i] = acc
+                else:
+                    row[i] = evaluate_laurent(laurent_from_matrix(np.asarray(x)),
+                                              n_sample)
+            symbols[o] = row
+        return symbols

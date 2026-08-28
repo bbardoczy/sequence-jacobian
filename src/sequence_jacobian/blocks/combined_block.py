@@ -3,6 +3,8 @@
 from .block import Block
 from .auxiliary_blocks.jacobiandict_block import JacobianDictBlock
 from .support.parent import Parent
+import numpy as np
+
 from ..classes import ImpulseDict, JacobianDict
 from ..utilities.graph import DAG, find_intermediate_inputs
 
@@ -100,6 +102,50 @@ class CombinedBlock(Block, Parent, DAG):
             curlyJs.update(curlyJ)
             
         return curlyJs
+
+    def _symbol(self, ss, inputs, outputs, T, n_sample):
+        """Symbol of this DAG, composed from its blocks rather than from its Jacobian.
+
+        Walks the blocks in evaluation order -- DAG already sorted them -- and
+        carries d v / d inputs for every variable produced so far, as one array
+        of values on the unit circle per input. Composing a block is then a
+        pointwise multiply-add per sampled z, instead of a T x T matrix product.
+
+        Composing symbols rather than reading one off the composed Jacobian is
+        the whole point: a composed Jacobian carries truncation artifacts in
+        exactly the corner the coefficients would be read from.
+        """
+        ones = np.ones(n_sample, dtype=complex)
+        zeros = np.zeros(n_sample, dtype=complex)
+
+        # Seed with the identity, so an input maps to itself.
+        total = {i: {i: ones} for i in inputs}
+
+        vector_valued = ss._vector_valued()
+        inner_inputs = (inputs | self._required) - vector_valued
+        inner_outputs = (outputs | self._required) - vector_valued
+
+        for block in self.blocks:
+            if not ((inner_inputs & block.inputs) and (inner_outputs & block.outputs)):
+                continue
+
+            block_outputs = inner_outputs & block.outputs
+            block_inputs = inner_inputs & block.inputs
+            S = block._symbol(ss, block_inputs, block_outputs, T, n_sample)
+
+            # Iterate the block's outputs, not the symbols it happened to
+            # return: an output that does not move is a genuine zero and still
+            # has to be recorded, or a later block reading it looks unresolved.
+            for o in block_outputs:
+                acc = {i: zeros for i in inputs}
+                for m, s_om in S.get(o, {}).items():
+                    if m not in total:
+                        continue                    # a parameter, held fixed
+                    for i, t_mi in total[m].items():
+                        acc[i] = acc[i] + s_om * t_mi
+                total[o] = acc
+
+        return {o: total.get(o, {i: zeros for i in inputs}) for o in outputs}
 
     def _jacobian(self, ss, inputs, outputs, T, Js, options):
         Js = self._partial_jacobians(ss, inputs, outputs, T, Js, options)
