@@ -133,3 +133,16 @@ def test_aliasing_is_refused():
 
     with pytest.raises(ValueError, match="alias"):
         evaluate_laurent(np.zeros(2 * 20 - 1), n_sample=16)
+
+
+def test_unit_circle_is_shared_and_read_only():
+    """Cached and shared, so it must refuse the accidental mutation routes."""
+    from sequence_jacobian.determinacy import unit_circle
+
+    z = unit_circle(64)
+    assert unit_circle(64) is z
+    assert not z.flags.writeable
+    assert not z[::2].flags.writeable          # views inherit it
+    with pytest.raises(ValueError):
+        z += 1                                  # in-place arithmetic refused
+    assert unit_circle.cache_parameters()['maxsize'] is not None

@@ -22,7 +22,7 @@ from functools import lru_cache
 import numpy as np
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=8)
 def unit_circle(n_sample=8192):
     """The n_sample-th roots of unity, counterclockwise from z = 1.
 
@@ -32,8 +32,14 @@ def unit_circle(n_sample=8192):
     blocks builds it once rather than once per block. Blocks that reach for an
     FFT never need the points at all.
 
-    The result is shared, so it is marked read-only: mutating it would corrupt
-    every other holder.
+    The result is shared, so it is marked read-only. That stops the accidental
+    routes -- in-place arithmetic raises, and views inherit the flag -- though a
+    caller who deliberately calls setflags(write=True) can still corrupt it for
+    everyone. Copy it if you need to modify it.
+
+    Bounded rather than unbounded, since n_sample is in practice one value and
+    an unbounded cache would retain an array per distinct value forever.
+    Rebuilding costs tens of microseconds, so a miss is cheap.
     """
     z = np.exp(2j * np.pi * np.arange(n_sample) / n_sample)
     z.setflags(write=False)
