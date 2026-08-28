@@ -39,6 +39,11 @@ To learn how to use the toolkit, it's best to work through our introductory Jupy
 - [Labor search](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/labor_search.ipynb)
     - example with multiple exogenous states
     - shocks to transition matrix of exogenous states
+- [Determinacy](https://github.com/shade-econ/sequence-jacobian/blob/master/notebooks/determinacy.ipynb)
+    - test whether a model has a unique bounded solution, via the winding number
+    - read the symbol of a block, and plot det j(z) around the unit circle
+    - cyclical income risk and the determinacy boundary
+    - rule out the false positives with `check_existence`
 
 ## Resources
 
