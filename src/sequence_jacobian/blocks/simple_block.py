@@ -8,6 +8,7 @@ from .block import Block
 from ..classes import SteadyStateDict, ImpulseDict, JacobianDict, SimpleSparse
 from ..utilities import misc
 from ..utilities.function import ExtendedFunction
+from ..determinacy import unit_circle
 
 '''Part 1: SimpleBlock class and @simple decorator to generate it'''
 
@@ -88,6 +89,43 @@ class SimpleBlock(Block):
                     J[o][i] = invertedJ[i][o]
 
         return JacobianDict(J, outputs, inputs, self.name, T)
+
+    def _symbol(self, ss, inputs, outputs, T, n_sample):
+        """Symbol of this block's Jacobian, on the n_sample-th roots of unity.
+
+        Exact, and needs no truncation. Differentiating a simple block gives a
+        SimpleSparse, whose elements (i, m) -> x mean x on the diagonal i above
+        the main one, with its first m entries missing. Only the diagonal index
+        carries the Toeplitz part: m describes a finite-rank correction near the
+        boundary, which is compact and does not enter the symbol. So the symbol
+        is simply sum of x * z**(-i) over the elements.
+
+        Sign convention: i > 0 sits above the diagonal and is therefore a lead,
+        contributing z**(-i). The lag operator accordingly has symbol z, as in
+        Auclert, Majic, Rognlie and Straub (2025).
+
+        An absent entry is a genuine zero -- _jacobian drops entries that
+        differentiate to zero -- so every requested pair is filled in, whether
+        or not the Jacobian has it.
+
+        T is unused: a SimpleSparse does not depend on it. It stays in the
+        signature so that every block type answers to the same call.
+        """
+        z = unit_circle(n_sample)
+        J = self.jacobian(ss, inputs, outputs, T=T)
+
+        symbols = {}
+        for o in outputs:
+            row = {}
+            for i in inputs:
+                s = np.zeros_like(z)
+                x = J[o].get(i) if o in J.outputs else None
+                if x is not None:
+                    for (diag, _missing), coef in x.elements.items():
+                        s = s + coef * z ** (-diag)
+                row[i] = s
+            symbols[o] = row
+        return symbols
 
     def compute_single_shock_J(self, ss, i):
         input_args = {i: ignore(ss[i]) for i in self.inputs}

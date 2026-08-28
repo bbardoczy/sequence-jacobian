@@ -5,6 +5,7 @@ import copy
 from .block import Block
 from .het_block import HetBlock
 from ..classes import SteadyStateDict, JacobianDict, ImpulseDict
+from ..determinacy import evaluate_laurent, laurent_from_fake_news
 from ..utilities.ordered_set import OrderedSet
 from ..utilities.function import ExtendedFunction, CombinedExtendedFunction
 from ..utilities.bijection import Bijection
@@ -146,6 +147,20 @@ class StageBlock(Block):
 
     def _impulse_linear(self, ss, inputs, outputs, Js):
         return ImpulseDict(self._jacobian(ss, list(inputs.keys()), outputs, inputs.T).apply(inputs))
+
+    def _symbol(self, ss, inputs, outputs, T, n_sample):
+        """Symbol of this block's Jacobian, on the n_sample-th roots of unity.
+
+        Built from the fake news matrix rather than the Jacobian. See
+        determinacy.laurent_from_fake_news for why that is both exact and
+        cheaper, and note that reading coefficients off a Jacobian's corner is
+        only ever licensed for a block like this one, whose Jacobian the fake
+        news algorithm builds free of truncation artifacts.
+        """
+        F = self._fake_news(ss, inputs, outputs, T)
+        return {o: {i: evaluate_laurent(laurent_from_fake_news(Foi), n_sample)
+                    for i, Foi in row.items()}
+                for o, row in F.items()}
 
     def fake_news_matrix(self, ss, inputs, outputs=None, T=None, **kwargs):
         """Fake news matrices F[o][i] for this block. See HetBlock.fake_news_matrix."""
