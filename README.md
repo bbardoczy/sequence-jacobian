@@ -12,28 +12,23 @@ may eventually be proposed upstream; some of it exists because it suits my work.
 ## What this fork adds
 
 Version numbers are independent of upstream and start from upstream `v1.0.0`;
-[CHANGELOG.md](CHANGELOG.md) records every difference, release by release.
+[CHANGELOG.md](CHANGELOG.md) records every difference, release by release. Highlights:
 
-- **Determinacy checking** *(1.2)* by the winding number criterion, so a model can be asked
+- **Determinacy checking** `(v1.2)` by the winding number criterion, so a model can be asked
   directly whether it has a unique bounded solution. `Block.winding_number` returns the
   verdict and `Block.check_existence` rules out the one case where that verdict can
   mislead. See the [determinacy notebook](notebooks/determinacy.ipynb).
-- **`ConditionalMarkov`** *(1.1)*, a `LawOfMotion` whose transition matrix may depend on the
+- **`ConditionalMarkov`** `(v1.1)`, a `LawOfMotion` whose transition matrix may depend on the
   other states rather than only on the one it updates. `ExogenousMaker` accepts these
   alongside ordinary Markov matrices.
-- **Quality-of-life improvements** *(1.1, 1.2)*. The ones most likely to matter:
-    - blocks and the Jacobians they produce are named consistently, and anonymous or
-      duplicated names are refused rather than silently resolved *(1.2)*. This fixed cases
-      where a Jacobian was quietly applied to the wrong block, or a block was dropped from
-      addressing while still evaluating.
-    - `HetBlock.fake_news_matrix()` exposes the object the Jacobian is assembled from, which
-      is worth inspecting on its own *(1.2)*
-    - arithmetic on `ImpulseDict` no longer applies to `internals` *(1.1)*. This changes
-      returned numbers rather than raising, so results computed under 1.0 that relied on
+- **Quality-of-life improvements** `(v1.1, v1.2)`. The ones most likely to matter:
+    - Blocks and the Jacobians they produce are named consistently and anonymous or
+      duplicated names are refused rather than silently resolved `(v1.2)`. No more Jacobians
+      colliding under the name `NestedDict`.
+    - Arithmetic on `ImpulseDict` no longer applies to `internals` `(v1.1)`. This changes
+      returned numbers rather than raising, so results computed under `v1.0` that relied on
       demeaned internals will differ.
-    - `StageBlock` can report a narrowed set of internals instead of always returning
-      everything *(1.1)*
-- **A reproducible development environment** *(1.1)* in [environment.yml](environment.yml).
+- **A reproducible development environment** `(v1.1)` in [environment.yml](environment.yml).
 
 ## Requirements and installation
 
