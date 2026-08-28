@@ -7,7 +7,7 @@ microeconomic heterogeneity.
 
 **This is a personal fork of [shade-econ/sequence-jacobian](https://github.com/shade-econ/sequence-jacobian).**
 I maintain it for my own research and for the replication files that go with it. Some of what is here
-may eventually be proposed upstream; some of it exists because it suits my work. I am solely responsible for the changes and any mistakes made here.
+may eventually be proposed upstream; some of it exists because it suits my work. I am solely responsible for the changes made here.
 
 ## What this fork adds
 
@@ -21,7 +21,14 @@ Version numbers are independent of upstream and start from upstream `v1.0.0`;
 - **`ConditionalMarkov`** `(v1.1)`, a `LawOfMotion` whose transition matrix may depend on the
   other states rather than only on the one it updates. `ExogenousMaker` accepts these
   alongside ordinary Markov matrices.
-- **Quality-of-life improvements** `(v1.1, v1.2)`. The ones most likely to matter:
+- **Changes and fixes**. The ones most likely to matter:
+    - Keyword arguments given to `apply_function` reached the path but not the steady state
+      `(v1.1)`, so a SimpleBlock using them computed its steady state under different
+      arguments than its path. Wrong numbers, no error.
+    - `SimpleSparse.array()` raised `ValueError` whenever an operator's terms cancelled
+      exactly `(v1.2)` -- a government budget where interest paid on debt nets against
+      interest received on it, say. This broke every product against a dense matrix, so it
+      surfaced during composition, well away from its cause.
     - Blocks and the Jacobians they produce are named consistently and anonymous or
       duplicated names are refused rather than silently resolved `(v1.2)`. No more Jacobians
       colliding under the name `NestedDict`.
