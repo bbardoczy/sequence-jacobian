@@ -34,12 +34,12 @@ def test_dag_constructor():
 
 
 def test_visited():
-    test_dag.visit_from_outputs(['f']) == OrderedSet([0, 1, 2])
-    test_dag.visit_from_outputs(['b']) == OrderedSet([0])
-    test_dag.visit_from_outputs(['d']) == OrderedSet([0, 1])
+    assert test_dag.visit_from_outputs(['f']) == OrderedSet([0, 1, 2])
+    assert test_dag.visit_from_outputs(['b']) == OrderedSet([0])
+    assert test_dag.visit_from_outputs(['d']) == OrderedSet([0, 1])
 
-    test_dag.visit_from_inputs(['e']) == OrderedSet([0, 1, 2])
-    test_dag.visit_from_inputs(['z']) == OrderedSet([1, 2])
+    assert test_dag.visit_from_inputs(['e']) == OrderedSet([0, 1, 2])
+    assert test_dag.visit_from_inputs(['z']) == OrderedSet([1, 2])
 
 
 def test_find_cycle():
