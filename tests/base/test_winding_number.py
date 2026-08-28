@@ -131,3 +131,36 @@ def test_identically_singular_system_raises():
 
     with pytest.raises(ValueError, match="vanishes identically"):
         model.winding_number(ss, ['u'], ['resid'], T=20, n_sample=256)
+
+
+@pytest.mark.parametrize("coefficient, expected", [
+    (0.9999999999, "unit root"),          # symbol 1 - a*z, near-root at z = 1
+    (-0.9999999999, "period two"),        # symbol 1 + a*z, near-root at z = -1
+])
+def test_near_zero_says_where(coefficient, expected):
+    """The location of the closest approach diagnoses the kind of near-root."""
+    @sj.simple
+    def near_root(u, a):
+        resid = u - a * u(-1)
+        return resid
+
+    ss = SteadyStateDict({'u': 1.0, 'a': coefficient, 'resid': 0.0})
+    model = sj.create_model([near_root], name='nearroot')
+
+    with pytest.warns(UserWarning, match=expected):
+        model.winding_number(ss, ['u'], ['resid'], T=20, n_sample=4096)
+
+
+def test_near_zero_reports_a_cycle():
+    """A complex near-root is reported as an oscillation, with its period."""
+    @sj.simple
+    def cyclical(u, a):
+        resid = u - a * u(-1) + a * u(-2)
+        return resid
+
+    # symbol 1 - a z + a z**2 has complex roots just off the circle
+    ss = SteadyStateDict({'u': 1.0, 'a': 0.9999999999, 'resid': 0.0})
+    model = sj.create_model([cyclical], name='cycle')
+
+    with pytest.warns(UserWarning, match="oscillating with period"):
+        model.winding_number(ss, ['u'], ['resid'], T=20, n_sample=16384)

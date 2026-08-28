@@ -170,3 +170,31 @@ def winding_number_of_path(path, max_step=np.pi / 2):
             f'so the winding number may miss a turn. Raise n_sample.')
 
     return WindingNumber(int(round(np.sum(steps) / (2 * np.pi))))
+
+
+def describe_near_zero(path, n_sample=None):
+    """Say where on the unit circle det j(z) comes closest to the origin.
+
+    Worth reporting, because the location diagnoses what kind of root is nearly
+    on the circle, and those point at different parts of a model. Where
+    det j(z0) = 0, the sequence z0**(-s) is annihilated by H_U; it has modulus
+    one, so it neither decays nor explodes, and is a bounded solution to the
+    homogeneous system. z0 = 1 makes that sequence constant, which is a unit
+    root -- something with no mean reversion, such as debt under a fiscal rule
+    at its stability boundary, or wealth when beta * R = 1. z0 = -1 alternates.
+    A complex z0 = exp(i*theta) oscillates at frequency theta, a deterministic
+    cycle.
+    """
+    path = np.asarray(path)
+    k = int(np.argmin(np.abs(path)))
+    n = len(path) if n_sample is None else n_sample
+    theta = 2 * np.pi * k / n
+
+    if k == 0:
+        return ('The closest approach is at z = 1, so the near-root is a unit '
+                'root: some direction of the model has no mean reversion.')
+    if 2 * k == n:
+        return ('The closest approach is at z = -1, so the near-root alternates '
+                'with period two.')
+    return (f'The closest approach is at z = exp({theta:.3f}i), a near-root '
+            f'oscillating with period {2 * np.pi / theta:.1f}.')

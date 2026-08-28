@@ -14,7 +14,7 @@ from ..utilities.function import input_defaults
 from ..utilities.bijection import Bijection
 from ..utilities.ordered_set import OrderedSet
 from ..classes import SteadyStateDict, UserProvidedSS, ImpulseDict, JacobianDict, FactoredJacobianDict
-from ..determinacy import winding_number_of_path
+from ..determinacy import describe_near_zero, winding_number_of_path
 
 Array = Any
 
@@ -303,7 +303,7 @@ class Block:
 
     def winding_number(self, ss: SteadyStateDict, unknowns: List[str],
                        targets: List[str], T: Optional[int] = None,
-                       n_sample: int = 8192, near_zero: float = 1e-8,
+                       n_sample: int = 8192, near_zero: Optional[float] = None,
                        return_path: bool = False):
         """Whether this model has a unique bounded solution, by winding number.
 
@@ -317,11 +317,22 @@ class Block:
         cannot be verified numerically, only probed, so this warns when the path
         comes within ``near_zero`` of the origin relative to its own scale.
 
+        near_zero defaults to 10 / n_sample, and has to scale that way. Near a
+        simple root the determinant grows about linearly in the distance along
+        the circle, so sampling at K points sees a genuine on-circle root only
+        as a dip of order 1/K -- around 1e-4 at the default. A fixed small
+        tolerance would therefore never fire on exactly the case the check
+        exists for, while healthy models sit three orders of magnitude clear:
+        the shipped Krusell-Smith and HANK models stay above 0.1.
+
         Solved blocks are unwrapped and their unknowns promoted automatically;
         the count is unaffected, since a solved block's own symbol contributes no
         winding of its own.
         """
         from .combined_block import combine
+
+        if near_zero is None:
+            near_zero = 10 / n_sample
 
         blocks, extra_unknowns, extra_targets = self._promote_solved()
         unknowns = self.make_ordered_set(list(unknowns) + extra_unknowns)
@@ -353,7 +364,8 @@ class Block:
                 f'det j(z) comes within {modulus.min() / modulus.max():.1e} of '
                 'the origin relative to its largest value, so the winding number '
                 'is not a reliable verdict: the criterion assumes no zero on the '
-                'unit circle, and this model is close to having one.')
+                'unit circle, and this model is close to having one. '
+                + describe_near_zero(path))
 
         wind = winding_number_of_path(path)
         return (wind, path) if return_path else wind
