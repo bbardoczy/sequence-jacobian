@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-01
+
 ### Added
 
 - **Determinacy checking**, implementing the winding number criterion of Auclert, Majic,
@@ -124,5 +126,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A keyword argument was not passed on to all calls of `f` in `Displace.apply`. Fix
   contributed by [Gregor Boehl](https://github.com/gboehl) (PR #8, upstream).
 
-[Unreleased]: https://github.com/bbardoczy/sequence-jacobian/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/bbardoczy/sequence-jacobian/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/bbardoczy/sequence-jacobian/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/bbardoczy/sequence-jacobian/compare/v1.0.0...v1.1.0
