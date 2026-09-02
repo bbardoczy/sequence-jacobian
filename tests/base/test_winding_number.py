@@ -230,3 +230,62 @@ def test_the_public_surface_is_the_two_block_methods():
                  'unit_circle', 'evaluate_laurent', 'laurent_from_matrix',
                  'laurent_from_fake_news', 'describe_near_zero'):
         assert not hasattr(sj, name), f'sj.{name} should not be public'
+
+
+@pytest.mark.parametrize('displacement, a, expected', [
+    (+1, 0.5, -1),      # a lead, root inside: indeterminacy of dimension one
+    (+1, 2.0, 0),       # a lead, but the constant dominates
+    (+2, 0.5, -2),      # two leads
+    (+2, 2.0, 0),
+    (-1, 0.5, +1),      # a lag, root inside: nonexistence of dimension one
+    (-1, 2.0, 0),
+    (-2, 0.5, +2),      # two lags
+])
+def test_a_solved_block_may_displace_someone_elses_unknown(displacement, a,
+                                                           expected):
+    """A solved block that leads or lags a variable which is not its unknown.
+
+    _promote_solved lifts a solved block's own unknown out, so that case takes
+    care of itself. The one worth pinning is the other: the block solves for u
+    while displacing x, a global unknown belonging elsewhere, and the symbol has
+    to be composed through the promotion correctly.
+
+    Each case is built twice, once with the displacement inside the solved block
+    and once written directly as a simple block. They describe the same
+    operator, so they must agree with each other and with the closed form.
+
+    With u_t = x_{t+d} and res_t = u_t - a x_t + (a - 1), the symbol is
+    z**(-d) - a, on the convention that a lag contributes z and a lead z**(-1).
+    On the unit circle |z**(-d)| = 1, so by Rouche the winding number is that of
+    z**(-d) when a < 1, namely -d, and that of the constant -a when a > 1,
+    namely zero. Covering both signs and a dimension above one would catch a
+    sign error, an off-by-one, or a collapse to dimension one.
+    """
+    d = displacement
+
+    @sj.solved(unknowns={'u': (-10.0, 10.0)}, targets=['res_u'])
+    def displace(u, x):
+        res_u = x(d) - u
+        return res_u
+
+    @sj.simple
+    def target(u, x, a):
+        res_x = u - a * x + (a - 1)
+        return res_x
+
+    @sj.simple
+    def direct(x, a):
+        res_x = x(d) - a * x + (a - 1)
+        return res_x
+
+    ss = SteadyStateDict({'x': 1.0, 'u': 1.0, 'a': a,
+                          'res_u': 0.0, 'res_x': 0.0})
+
+    # A model may not share a name with a block it contains.
+    via_solved = sj.create_model([displace, target], name='model_via_solved')
+    plain = sj.create_model([direct], name='model_direct')
+
+    assert via_solved.winding_number(ss, ['x'], ['res_x'], T=100,
+                                     n_sample=2048) == expected
+    assert plain.winding_number(ss, ['x'], ['res_x'], T=100,
+                                n_sample=2048) == expected
