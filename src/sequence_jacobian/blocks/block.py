@@ -282,8 +282,8 @@ class Block:
 
         Returns the blocks, and the unknowns and targets to append.
         """
-        from .solved_block import SolvedBlock
         from .combined_block import CombinedBlock
+        from .solved_block import SolvedBlock
 
         blocks, unknowns, targets = [], [], []
 
@@ -440,7 +440,7 @@ class Block:
         if not np.isfinite(small) or not np.isfinite(large):
             warnings.warn(
                 'The truncated system is exactly singular, so H_U x = y has no '
-                'solution for generic y.')
+                'solution for generic y.', stacklevel=2)
             return np.inf
         growth = large / small
 
@@ -450,7 +450,7 @@ class Block:
                 f'goes from {T} to {T_compare}, reaching {large:.1e} times the '
                 'size of what was fed in. That is the signature of no bounded '
                 'solution existing, so a winding number of zero here would be a '
-                'false positive -- see check_existence.')
+                'false positive -- see check_existence.', stacklevel=2)
 
         return growth
 
