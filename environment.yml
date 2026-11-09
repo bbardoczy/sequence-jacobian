@@ -43,6 +43,9 @@ dependencies:
   # Testing.
   - pytest
 
+  # Linting; configured in pyproject.toml.
+  - ruff
+
   # Notebooks under notebooks/.
   - ipykernel
   - nbconvert
