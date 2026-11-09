@@ -8,7 +8,7 @@ import pytest
 import sequence_jacobian as sj
 from sequence_jacobian.blocks.block import Block
 from sequence_jacobian.classes.steady_state_dict import SteadyStateDict
-from sequence_jacobian.determinacy import WindingNumber
+from sequence_jacobian.determinacy import WindingNumber, winding_number_of_path
 
 
 def test_taylor_principle(one_asset_hank_dag):
@@ -70,33 +70,70 @@ def test_solved_block_has_no_symbol():
                         n_sample=64)
 
 
-def test_promotion_matches_writing_the_model_flat():
-    """Promoting a solved block gives the system you would have written by hand."""
-    @sj.solved(unknowns={'p': (0.5, 2.0)}, targets=['p_resid'])
-    def pricing(p, x, beta):
-        p_resid = beta * p(+1) + x - p
+@pytest.mark.parametrize('beta, c, expected', [
+    (0.5, 0.5, 0),      # pricing determinate on its own, and so is the model
+    (0.9, 2.0, -1),     # pricing determinate on its own, the model is not
+    (1.5, 2.0, -1),     # pricing indeterminate on its own, and so is the model
+    (1.5, 0.2, 0),      # pricing indeterminate on its own, clearing pins it down
+])
+def test_promotion_matches_writing_the_model_flat(beta, c, expected):
+    """Promoting a solved block gives the system you would have written by hand.
+
+    And only promoting keeps the solved block's own winding in the count. pricing
+    solves p_t = beta p_{t+1} + u_t, and clearing sets resid_t = p_t - c u_t.
+    Written flat, j(z) = [[-c, 1], [1, beta/z - 1]], so det j(z) is
+    (c - 1) - c beta / z, whose winding number is -1 when c beta > |c - 1| and
+    zero otherwise.
+
+    The tempting alternative is to give the solved block a symbol by the
+    implicit function theorem, dp/du = -j_pu / j_pp pointwise in z, and to wind
+    the outer system alone. Its symbol is then det j(z) / j_pp(z), so its
+    winding number is the model's minus the solved block's own: that of
+    beta/z - 1, which is -1 when beta > 1. Nothing warns, since nothing comes
+    near zero on the circle. Harmless while pricing is determinate on its own,
+    wrong once it is not -- calling the third case unique, and finding no
+    solution in the fourth, a model that is fine. (beta = 1/phi reads pricing as
+    Fisher plus a Taylor rule, solved for inflation, so beta > 1 is a violated
+    Taylor principle hidden inside a solved block.)
+    """
+    @sj.solved(unknowns={'p': (-10.0, 10.0)}, targets=['p_resid'])
+    def pricing(p, u, beta):
+        p_resid = beta * p(+1) + u - p
         return p_resid
 
     @sj.simple
-    def pricing_flat(p, x, beta):
-        p_resid = beta * p(+1) + x - p
+    def pricing_flat(p, u, beta):
+        p_resid = beta * p(+1) + u - p
         return p_resid
 
     @sj.simple
-    def clearing(p, u):
-        resid = p - 2 * u
+    def clearing(p, u, c):
+        resid = p - c * u
         return resid
 
-    ss = SteadyStateDict({'x': 1.0, 'beta': 0.95, 'p': 20.0, 'u': 10.0,
+    # zero is a steady state at every beta and c
+    ss = SteadyStateDict({'u': 0.0, 'p': 0.0, 'beta': beta, 'c': c,
                           'p_resid': 0.0, 'resid': 0.0})
+    T, n_sample = 50, 512
 
     nested = sj.create_model([pricing, clearing], name='nested')
     flat = sj.create_model([pricing_flat, clearing], name='flat')
 
-    a = nested.winding_number(ss, ['u'], ['resid'], T=50, n_sample=512)
-    b = flat.winding_number(ss, ['u', 'p'], ['resid', 'p_resid'], T=50,
-                            n_sample=512)
-    assert a == b
+    assert nested.winding_number(ss, ['u'], ['resid'], T=T,
+                                 n_sample=n_sample) == expected
+    assert flat.winding_number(ss, ['u', 'p'], ['resid', 'p_resid'], T=T,
+                               n_sample=n_sample) == expected
+
+    # The implicit function theorem route, from the same two blocks.
+    inner = pricing.block._symbol(ss, ['u', 'p'], ['p_resid'], T,
+                                  n_sample)['p_resid']
+    outer = clearing._symbol(ss, ['u', 'p'], ['resid'], T, n_sample)['resid']
+    dp_du = -inner['u'] / inner['p']
+    own = winding_number_of_path(inner['p'])
+    unpromoted = winding_number_of_path(outer['u'] + outer['p'] * dp_du)
+
+    assert own == (-1 if beta > 1 else 0)
+    assert unpromoted == expected - own
 
 
 def test_identically_singular_system_raises():

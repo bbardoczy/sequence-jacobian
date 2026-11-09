@@ -322,9 +322,16 @@ class Block:
         genuinely broken ones -- whereas the angular step separates the two
         cleanly. Use return_path if you want to judge proximity yourself.
 
-        Solved blocks are unwrapped and their unknowns promoted automatically;
-        the count is unaffected, since a solved block's own symbol contributes no
-        winding of its own.
+        Solved blocks are unwrapped and their unknowns and targets promoted
+        automatically, so pass only the model's own. That is not a convenience:
+        the problem a solved block solves internally has a winding number of its
+        own, and it belongs in the count. Giving the solved block a symbol by the
+        implicit function theorem instead, and winding the outer system alone,
+        would divide det j(z) by that of the inner problem, and so leave the
+        count off by exactly the inner winding number -- harmless when the solved
+        block is determinate on its own, wrong in either direction when it is
+        not, and without any warning. test_promotion_matches_writing_the_model_flat
+        has a two-equation example.
         """
         from .combined_block import combine
 

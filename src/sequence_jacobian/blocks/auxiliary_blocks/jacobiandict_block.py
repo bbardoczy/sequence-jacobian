@@ -47,6 +47,15 @@ class JacobianDictBlock(JacobianDict, Block):
         which is the usual reason to precompute one. Not safe for a Jacobian
         that is itself a composition, where truncation artifacts sit exactly
         where the coefficients are read.
+
+        Nor for a solved block's Jacobian, which is a truncated inverse. At best
+        its corner approximates the symbol the implicit function theorem would
+        give, which already drops the solved block's own winding number (see
+        Block.winding_number). When that winding number is not zero, the corner
+        is not even that: it grows geometrically, is set by the boundary
+        condition the truncation imposes, and can bring the count out at
+        -(T-1) with no warning. Put the solved block itself in the model
+        instead, so that winding_number can promote it.
         """
         symbols = {}
         for o in outputs:
